@@ -1,19 +1,29 @@
 <?php
-header("Content-Type: application/json");
-header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: POST");
-header("Access-Control-Allow-Headers: Content-Type");
+session_start();
+include 'db.php'; // Your DB connection
 
-include "db.php";
+$userId = $_SESSION['user_id']; // Logged-in user
+$groupName = $_POST['group_name'] ?? '';
 
-$data = json_decode(file_get_contents("php://input"));
+if(!$groupName){
+    echo json_encode(["status" => "error", "message" => "Group name is required"]);
+    exit;
+}
 
-$stmt = $conn->prepare("INSERT INTO groups (group_name, description, created_by) VALUES (?, ?, ?)");
-$stmt->bind_param("sss", $data->group_name, $data->description, $data->created_by);
+$sql = "INSERT INTO groups (user_id, name) VALUES (?, ?)";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("is", $userId, $groupName);
 
 if($stmt->execute()){
-    echo json_encode(["success" => true, "message" => "Group created successfully"]);
+    $newGroupId = $stmt->insert_id;
+    echo json_encode([
+        "status" => "success",
+        "group" => [
+            "id" => $newGroupId,
+            "name" => $groupName
+        ]
+    ]);
 } else {
-    echo json_encode(["success" => false, "message" => "Failed to create group"]);
+    echo json_encode(["status" => "error", "message" => $stmt->error]);
 }
 ?>

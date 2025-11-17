@@ -1,15 +1,19 @@
 <?php
-header("Content-Type: application/json");
-header("Access-Control-Allow-Origin: *");
+session_start();
+include 'db.php';
 
-include "db.php";
+$userId = $_SESSION['user_id'];
 
-$result = $conn->query("SELECT * FROM groups ORDER BY created_at DESC");
+$sql = "SELECT * FROM groups WHERE user_id = ?";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("i", $userId);
+$stmt->execute();
+$result = $stmt->get_result();
 
 $groups = [];
 while($row = $result->fetch_assoc()){
     $groups[] = $row;
 }
 
-echo json_encode(["success" => true, "data" => $groups]);
+echo json_encode($groups);
 ?>
