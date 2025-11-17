@@ -1,16 +1,48 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { MagnifyingGlassIcon, EyeIcon, TrashIcon, PencilIcon } from "@heroicons/react/24/solid";
 import AdminLayout from "../../layouts/AdminLayout";
+import axios from "axios";
 
 export default function ManageGroups() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [groups, setGroups] = useState([]);
 
-  const groups = [
-    { id: 1, name: "Math 101 Reviewers", course: "BSIT 3A", members: 12, created: "Oct 18, 2024", status: "active" },
-    { id: 2, name: "System Integration Project Group", course: "BSIT 4B", members: 8, created: "Oct 25, 2024", status: "active" },
-    { id: 3, name: "Biology Lab Buddies", course: "BS Biology 2A", members: 6, created: "Nov 1, 2024", status: "active" },
-    { id: 4, name: "English 101 Study Squad", course: "BA English 1B", members: 15, created: "Nov 5, 2024", status: "full" },
-  ];
+  const fetchGroups = async () => {
+    try {
+      const res = await axios.get("/api/admin/groups");
+      setGroups(res.data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    fetchGroups();
+  }, []);
+
+  const handleDelete = async (id) => {
+    if (!confirm("Are you sure you want to delete this group?")) return;
+    try {
+      await axios.delete(`/api/admin/groups/${id}`);
+      fetchGroups();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleUpdate = async (group) => {
+    const newStatus = group.status === "active" ? "full" : "active"; // example toggle
+    try {
+      await axios.put(`/api/admin/groups/${group.id}`, {
+        name: group.name,
+        course: group.course,
+        status: newStatus,
+      });
+      fetchGroups();
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const filteredGroups = groups.filter(
     (g) =>
@@ -19,6 +51,7 @@ export default function ManageGroups() {
   );
 
   return (
+    <AdminLayout>
       <div className="max-w-7xl mx-auto">
         <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
@@ -76,10 +109,16 @@ export default function ManageGroups() {
                         <button className="p-2 rounded-lg bg-gold/10 text-gold hover:bg-gold/20 transition">
                           <EyeIcon className="w-4 h-4" />
                         </button>
-                        <button className="p-2 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition">
+                        <button
+                          className="p-2 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition"
+                          onClick={() => handleUpdate(group)}
+                        >
                           <PencilIcon className="w-4 h-4" />
                         </button>
-                        <button className="p-2 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 transition">
+                        <button
+                          className="p-2 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 transition"
+                          onClick={() => handleDelete(group.id)}
+                        >
                           <TrashIcon className="w-4 h-4" />
                         </button>
                       </div>
@@ -95,17 +134,8 @@ export default function ManageGroups() {
               <p>No groups found matching your search.</p>
             </div>
           )}
-
-          <div className="mt-6 flex justify-between items-center text-sm text-gray-600">
-            <p>Showing {filteredGroups.length} of {groups.length} groups</p>
-            <div className="flex gap-1">
-              <button className="px-3 py-1.5 rounded bg-gray-100 hover:bg-gray-200 transition">Prev</button>
-              <button className="px-3 py-1.5 rounded bg-maroon text-white">1</button>
-              <button className="px-3 py-1.5 rounded bg-gray-100 hover:bg-gray-200 transition">2</button>
-              <button className="px-3 py-1.5 rounded bg-gray-100 hover:bg-gray-200 transition">Next</button>
-            </div>
-          </div>
         </div>
       </div>
+    </AdminLayout>
   );
 }

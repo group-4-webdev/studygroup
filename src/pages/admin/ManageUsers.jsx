@@ -1,16 +1,52 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { MagnifyingGlassIcon, EyeIcon, TrashIcon, PencilIcon, CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/solid";
 import AdminLayout from "../../layouts/AdminLayout";
+import axios from "axios";
 
 export default function ManageUsers() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [users, setUsers] = useState([]);
 
-  const users = [
-    { id: 1, name: "Maria Santos", email: "maria@wmsu.edu.ph", course: "BSIT 3A", joined: "Oct 10, 2024", status: "active" },
-    { id: 2, name: "Juan Dela Cruz", email: "juan@wmsu.edu.ph", course: "BSIT 4B", joined: "Oct 25, 2024", status: "banned" },
-    { id: 3, name: "Anna Lim", email: "anna@wmsu.edu.ph", course: "BS Biology 2A", joined: "Nov 2, 2024", status: "active" },
-    { id: 4, name: "Pedro Reyes", email: "pedro@wmsu.edu.ph", course: "BA English 1B", joined: "Nov 6, 2024", status: "active" },
-  ];
+  // Fetch users from backend
+  const fetchUsers = async () => {
+    try {
+      const res = await axios.get("/api/admin/users");
+      setUsers(res.data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  // Delete user
+  const handleDelete = async (id) => {
+    if (!confirm("Are you sure you want to delete this user?")) return;
+    try {
+      await axios.delete(`/api/admin/users/${id}`);
+      fetchUsers();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Update user (example: toggle active/banned)
+  const handleUpdate = async (user) => {
+    const newStatus = user.status === "active" ? "banned" : "active";
+    try {
+      await axios.put(`/api/admin/users/${user.id}`, {
+        name: user.name,
+        email: user.email,
+        course: user.course,
+        status: newStatus,
+      });
+      fetchUsers();
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const filteredUsers = users.filter(
     (u) =>
@@ -20,6 +56,7 @@ export default function ManageUsers() {
   );
 
   return (
+    <AdminLayout>
       <div className="max-w-7xl mx-auto">
         <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
@@ -91,10 +128,16 @@ export default function ManageUsers() {
                         <button className="p-2 rounded-lg bg-gold/10 text-gold hover:bg-gold/20 transition">
                           <EyeIcon className="w-4 h-4" />
                         </button>
-                        <button className="p-2 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition">
+                        <button
+                          className="p-2 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition"
+                          onClick={() => handleUpdate(user)}
+                        >
                           <PencilIcon className="w-4 h-4" />
                         </button>
-                        <button className="p-2 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 transition">
+                        <button
+                          className="p-2 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 transition"
+                          onClick={() => handleDelete(user.id)}
+                        >
                           <TrashIcon className="w-4 h-4" />
                         </button>
                       </div>
@@ -112,5 +155,6 @@ export default function ManageUsers() {
           )}
         </div>
       </div>
+    </AdminLayout>
   );
 }
