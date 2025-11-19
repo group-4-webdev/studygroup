@@ -1,169 +1,282 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { UserCircleIcon, CameraIcon, CheckCircleIcon } from "@heroicons/react/24/solid";
+import axios from "axios";
 
 export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState("profile");
+  const [user, setUser] = useState({
+    first_name: "",
+    middle_name: "",
+    last_name: "",
+    username: "",
+    email: "",
+    bio: "",
+    profile_photo: ""
+  });
+  const [photoPreview, setPhotoPreview] = useState(null);
+  const [originalUser, setOriginalUser] = useState(null); // For cancel
+  const fileInputRef = useRef();
+
+  // Fetch user info on mount
+  useEffect(() => {
+    axios.get("http://localhost:3000/api/users/me")
+      .then(res => {
+        setUser(res.data);
+        setOriginalUser(res.data);
+        setPhotoPreview(res.data.profile_photo || null);
+      })
+      .catch(err => console.error("Error fetching user:", err));
+  }, []);
+
+  // Input change handler
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setUser({ ...user, [name]: value });
+  };
+
+  // Profile photo change
+  const handlePhotoChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setUser({ ...user, newPhotoFile: file });
+      setPhotoPreview(URL.createObjectURL(file));
+    }
+  };
+
+  // Save profile changes
+  const handleSave = async () => {
+    try {
+      const formData = new FormData();
+      formData.append("first_name", user.first_name);
+      formData.append("middle_name", user.middle_name);
+      formData.append("last_name", user.last_name);
+      formData.append("username", user.username);
+      formData.append("bio", user.bio);
+      if (user.newPhotoFile) formData.append("profile_photo", user.newPhotoFile);
+
+      const res = await axios.put("http://localhost:3000/api/users/me", formData, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
+
+      alert("Profile updated successfully!");
+      setUser(res.data);
+      setOriginalUser(res.data);
+      setPhotoPreview(res.data.profile_photo || null);
+      delete user.newPhotoFile;
+    } catch (err) {
+      console.error("Error updating profile:", err);
+      alert("Failed to update profile. Please try again.");
+    }
+  };
+
+  // Cancel changes
+  const handleCancel = () => {
+    if (originalUser) {
+      setUser(originalUser);
+      setPhotoPreview(originalUser.profile_photo || null);
+      delete user.newPhotoFile;
+    }
+  };
 
   return (
-      <div className="flex h-[calc(100vh-200px)] w-full max-w-[90rem] mx-auto">
-        <div className="flex-1 bg-white shadow-xl rounded-xl border border-gray-300 overflow-hidden">
-          <div className="h-full overflow-y-auto">
-            <div className="p-8 lg:p-10">
-              <div className="max-w-4xl mx-auto">
-                <div className="flex border-b border-gray-300 mb-8">
-                  <button
-                    onClick={() => setActiveTab("profile")}
-                    className={`px-8 py-4 font-semibold text-lg transition-colors ${
-                      activeTab === "profile"
-                        ? "text-maroon border-b-4 border-gold"
-                        : "text-gray-500 hover:text-maroon"
-                    }`}
-                  >
-                    Edit Profile
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("settings")}
-                    className={`px-8 py-4 font-semibold text-lg transition-colors ${
-                      activeTab === "settings"
-                        ? "text-maroon border-b-4 border-gold"
-                        : "text-gray-500 hover:text-maroon"
-                    }`}
-                  >
-                    Account Settings
-                  </button>
-                </div>
+    <div className="flex h-[calc(100vh-200px)] w-full max-w-[90rem] mx-auto">
+      <div className="flex-1 bg-white shadow-xl rounded-xl border border-gray-300 overflow-hidden">
+        <div className="h-full overflow-y-auto">
+          <div className="p-8 lg:p-10">
+            <div className="max-w-4xl mx-auto">
 
-                {activeTab === "profile" && (
-                  <div className="space-y-7">
-                    <div className="flex flex-col sm:flex-row items-center gap-6">
-                      <div className="relative">
+              {/* Tabs */}
+              <div className="flex border-b border-gray-300 mb-8">
+                <button
+                  onClick={() => setActiveTab("profile")}
+                  className={`px-8 py-4 font-semibold text-lg transition-colors ${
+                    activeTab === "profile"
+                      ? "text-maroon border-b-4 border-gold"
+                      : "text-gray-500 hover:text-maroon"
+                  }`}
+                >
+                  Edit Profile
+                </button>
+                <button
+                  onClick={() => setActiveTab("settings")}
+                  className={`px-8 py-4 font-semibold text-lg transition-colors ${
+                    activeTab === "settings"
+                      ? "text-maroon border-b-4 border-gold"
+                      : "text-gray-500 hover:text-maroon"
+                  }`}
+                >
+                  Account Settings
+                </button>
+              </div>
+
+              {/* Profile Tab */}
+              {activeTab === "profile" && (
+                <div className="space-y-7">
+                  <div className="flex flex-col sm:flex-row items-center gap-6">
+                    <div className="relative">
+                      {photoPreview ? (
+                        <img
+                          src={
+                            photoPreview.startsWith("/uploads")
+                              ? `http://localhost:3000${photoPreview}`
+                              : photoPreview
+                          }
+                          alt="Profile"
+                          className="w-28 h-28 rounded-full border-4 border-maroon shadow-lg object-cover"
+                        />
+                      ) : (
                         <UserCircleIcon className="w-28 h-28 text-maroon border-4 border-maroon rounded-full p-2 bg-white shadow-lg" />
-                        <button className="absolute bottom-0 right-0 bg-gold text-maroon p-2 rounded-full shadow-md hover:brightness-110 transition">
-                          <CameraIcon className="w-5 h-5" />
-                        </button>
-                      </div>
-                      <div className="text-center sm:text-left">
-                        <h3 className="text-xl font-bold text-maroon">Juan Dela Cruz</h3>
-                        <p className="text-sm text-gray-600">BSIT 3A • Class of 2026</p>
-                        <p className="text-xs text-gray-500 mt-1">Member since March 2025</p>
-                      </div>
+                      )}
+                      <button
+                        onClick={() => fileInputRef.current.click()}
+                        className="absolute bottom-0 right-0 bg-gold text-maroon p-2 rounded-full shadow-md hover:brightness-110 transition"
+                      >
+                        <CameraIcon className="w-5 h-5" />
+                      </button>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        ref={fileInputRef}
+                        onChange={handlePhotoChange}
+                      />
                     </div>
-
-                    <div className="grid sm:grid-cols-2 gap-5">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-                        <input
-                          type="text"
-                          defaultValue="Juan Dela Cruz"
-                          className="w-full p-3 rounded-lg bg-gray-100 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gold transition"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Student ID</label>
-                        <input
-                          type="text"
-                          defaultValue="2023-00123"
-                          className="w-full p-3 rounded-lg bg-gray-100 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gold transition"
-                        />
-                      </div>
+                    <div className="text-center sm:text-left">
+                      <h3 className="text-xl font-bold text-maroon">{`${user.first_name} ${user.middle_name} ${user.last_name}`}</h3>
+                      <p className="text-sm text-gray-600">{user.username}</p>
                     </div>
+                  </div>
 
+                  <div className="grid sm:grid-cols-2 gap-5">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Course & Year</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
                       <input
                         type="text"
-                        defaultValue="BSIT 3A"
+                        name="first_name"
+                        value={user.first_name}
+                        onChange={handleChange}
                         className="w-full p-3 rounded-lg bg-gray-100 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gold transition"
                       />
                     </div>
-
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Bio (Optional)</label>
-                      <textarea
-                        defaultValue="Passionate about web development and systems integration. Always looking for study buddies in IT 312!"
-                        className="w-full p-3 rounded-lg bg-gray-100 border border-gray-300 resize-none h-28 focus:outline-none focus:ring-2 focus:ring-gold transition"
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Middle Name</label>
+                      <input
+                        type="text"
+                        name="middle_name"
+                        value={user.middle_name}
+                        onChange={handleChange}
+                        className="w-full p-3 rounded-lg bg-gray-100 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gold transition"
                       />
-                    </div>
-
-                    <div className="flex gap-3">
-                      <button className="flex-1 bg-gold text-maroon py-3.5 font-semibold rounded-lg hover:brightness-110 transition flex items-center justify-center gap-2">
-                        <CheckCircleIcon className="w-5 h-5" />
-                        Save Changes
-                      </button>
-                      <button className="px-6 py-3.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition">
-                        Cancel
-                      </button>
                     </div>
                   </div>
-                )}
 
-                {activeTab === "settings" && (
-                  <div className="space-y-7">
-                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
-                      <p className="text-sm text-amber-800">
-                        <strong>Note:</strong> Email changes require verification. You’ll receive a confirmation link to your new email.
-                      </p>
-                    </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                    <input
+                      type="text"
+                      name="last_name"
+                      value={user.last_name}
+                      onChange={handleChange}
+                      className="w-full p-3 rounded-lg bg-gray-100 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gold transition"
+                    />
+                  </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Current Email</label>
-                      <input
-                        type="email"
-                        defaultValue="juan.delacruz@wmsu.edu.ph"
-                        disabled
-                        className="w-full p-3 rounded-lg bg-gray-200 border border-gray-300 text-gray-500 cursor-not-allowed"
-                      />
-                    </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                    <input
+                      type="text"
+                      name="username"
+                      value={user.username}
+                      onChange={handleChange}
+                      className="w-full p-3 rounded-lg bg-gray-100 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gold transition"
+                    />
+                  </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">New Email</label>
-                      <input
-                        type="email"
-                        placeholder="Enter new WMSU email"
-                        className="w-full p-3 rounded-lg bg-gray-100 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gold transition"
-                      />
-                    </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Bio (Optional)</label>
+                    <textarea
+                      name="bio"
+                      value={user.bio || ""}
+                      onChange={handleChange}
+                      className="w-full p-3 rounded-lg bg-gray-100 border border-gray-300 resize-none h-28 focus:outline-none focus:ring-2 focus:ring-gold transition"
+                    />
+                  </div>
 
-                    <div className="grid sm:grid-cols-2 gap-5">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
-                        <input
-                          type="password"
-                          placeholder="••••••••"
-                          className="w-full p-3 rounded-lg bg-gray-100 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gold transition"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
-                        <input
-                          type="password"
-                          placeholder="••••••••"
-                          className="w-full p-3 rounded-lg bg-gray-100 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gold transition"
-                        />
-                      </div>
-                    </div>
-
-                    <button className="w-full bg-maroon text-white py-3.5 rounded-lg hover:brightness-110 transition font-medium">
-                      Update Account Settings
+                  <div className="flex gap-3">
+                    <button
+                      onClick={handleSave}
+                      className="flex-1 bg-gold text-maroon py-3.5 font-semibold rounded-lg hover:brightness-110 transition flex items-center justify-center gap-2"
+                    >
+                      <CheckCircleIcon className="w-5 h-5" />
+                      Save Changes
                     </button>
+                    <button
+                      onClick={handleCancel}
+                      className="px-6 py-3.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
 
-                    <hr className="border-gray-300" />
+              {/* Settings Tab */}
+              {activeTab === "settings" && (
+                <div className="space-y-7">
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
+                    <p className="text-sm text-amber-800">
+                      <strong>Note:</strong> Email changes require verification. You’ll receive a confirmation link to your new email.
+                    </p>
+                  </div>
 
-                    <div className="bg-red-50 border border-red-200 rounded-xl p-5 space-y-3">
-                      <h3 className="font-semibold text-red-800">Danger Zone</h3>
-                      <p className="text-sm text-red-700">
-                        Deleting your account will permanently remove all your groups, messages, and data. This action cannot be undone.
-                      </p>
-                      <button className="w-full bg-red-600 text-white py-3 rounded-lg hover:bg-red-700 transition font-medium">
-                        Delete My Account
-                      </button>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Current Email</label>
+                    <input
+                      type="email"
+                      value={user.email}
+                      disabled
+                      className="w-full p-3 rounded-lg bg-gray-200 border border-gray-300 text-gray-500 cursor-not-allowed"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">New Email</label>
+                    <input
+                      type="email"
+                      placeholder="Enter new WMSU email"
+                      className="w-full p-3 rounded-lg bg-gray-100 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gold transition"
+                    />
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-5">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+                      <input
+                        type="password"
+                        placeholder="••••••••"
+                        className="w-full p-3 rounded-lg bg-gray-100 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gold transition"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
+                      <input
+                        type="password"
+                        placeholder="••••••••"
+                        className="w-full p-3 rounded-lg bg-gray-100 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gold transition"
+                      />
                     </div>
                   </div>
-                )}
-              </div>
+
+                  <button className="w-full bg-maroon text-white py-3.5 rounded-lg hover:brightness-110 transition font-medium">
+                    Update Account Settings
+                  </button>
+                </div>
+              )}
+
             </div>
           </div>
         </div>
       </div>
+    </div>
   );
 }
