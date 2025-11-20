@@ -25,7 +25,6 @@ export default function CreateAccount() {
   const handleCreate = async (e) => {
     e.preventDefault();
 
-    // Validate fields
     const { first_name, middle_name, last_name, username, email, password, confirm_password } = formData;
     if (!first_name || !middle_name || !last_name || !username || !email || !password || !confirm_password) {
       alert("Please fill out all fields!");

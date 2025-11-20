@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 
 export default function VerificationPage() {
   const [code, setCode] = useState("");
-  const [email, setEmail] = useState(""); // will pre-fill from query
+  const [email, setEmail] = useState(""); 
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
@@ -11,7 +11,6 @@ export default function VerificationPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Get the email from the query string and pre-fill the field
     const emailFromURL = searchParams.get("email");
     if (emailFromURL) setEmail(emailFromURL);
   }, [searchParams]);
@@ -27,13 +26,13 @@ export default function VerificationPage() {
       const res = await fetch("http://localhost:5000/api/auth/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, code }), // send email + code to backend
+        body: JSON.stringify({ email, code }), 
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Verification failed");
 
       setSuccess(true);
-      setTimeout(() => navigate("/login"), 3000);
+      setTimeout(() => navigate(`/login?email=${encodeURIComponent(email)}`), 3000);
     } catch (err) {
       alert(err.message);
     } finally {
@@ -58,7 +57,6 @@ export default function VerificationPage() {
           <h2 className="text-2xl font-bold text-maroon mb-3">Paste your verification code</h2>
           {!success ? (
             <form onSubmit={handleAccountVerification} className="w-72 flex flex-col">
-              {/* Display email (readonly) so user knows which account they’re verifying */}
               <input
                 type="email"
                 value={email}

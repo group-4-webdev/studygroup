@@ -8,6 +8,8 @@ import passwordRoutes from "./routes/passwordRoutes.js";
 import groupRoutes from "./routes/groupRoutes.js";
 import calendarRoutes from "./routes/calendarRoutes.js";
 import adminRoutes from "./routes/admin/adminRoutes.js"; 
+import accountRoutes from "./routes/accountRoutes.js";
+import groupAdminRoutes from "./routes/admin/groupAdminRoutes.js";
 
 dotenv.config();
 
@@ -22,10 +24,12 @@ app.use(cors({
 app.use("/api/auth", authRoutes);
 app.use("/api/auth", googleRoutes);
 app.use('/api/password', passwordRoutes);
+app.use("/api/account", accountRoutes);
 app.use("/api/groups", groupRoutes);
 app.use("/api/calendar", calendarRoutes);
 
 app.use("/api/admin", adminRoutes); 
+app.use("/api/admin", groupAdminRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

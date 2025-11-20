@@ -13,9 +13,23 @@ export const forgotPassword = async (req, res) => {
 
     const user = users[0];
 
-    if (!user.password)
-      return res.status(200).json({ message: "Google account – use Google Sign-In" });
+    // ❌ Block Google-only users
+    if (!user.password && user.google_id) {
+      return res.status(400).json({
+        type: "google",
+        message: "You signed up using Google. Please continue with Google Sign-In.",
+      });
+    }
 
+    // ❌ Block hybrid users (should not normally exist)
+    if (user.password && user.google_id) {
+      return res.status(400).json({
+        type: "hybrid",
+        message: "This account uses both Google + manual login. Please contact support.",
+      });
+    }
+
+    // ✅ Manual account — continue with reset logic
     const resetToken = crypto.randomBytes(32).toString("hex");
     const resetTokenHash = crypto.createHash("sha256").update(resetToken).digest("hex");
     const expireTime = new Date(Date.now() + 10 * 60 * 1000);
@@ -25,13 +39,13 @@ export const forgotPassword = async (req, res) => {
       [resetTokenHash, expireTime, user.id]
     );
 
-    const resetURL = `http://localhost:5173/reset-password/${resetToken}`;
+    const resetURL = `http://localhost:5173/reset-password/${resetToken}?email=${encodeURIComponent(user.email)}`;
+
     const message = `
       <div style="font-family: Arial, sans-serif; line-height:1.6;">
         <h2 style="color: #800000;">Crimsons Study Squad</h2>
         <p>Hi ${user.username},</p>
-        <p>We received a request to reset your password.</p>
-        <p>Click the link below to reset your password:</p>
+        <p>We received a request to reset your password. Copy the link below and open it in the same tab to reset your password:</p>
         <a href="${resetURL}" style="color:#800000; text-decoration:underline; font-weight:bold;">Reset Password</a>
         <p>This link expires in 10 minutes.</p>
         <p>If you didn’t request this, you can safely ignore this email.</p>

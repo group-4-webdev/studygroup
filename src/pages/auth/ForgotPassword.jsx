@@ -10,8 +10,8 @@ export default function ForgotPassword() {
   const handleReset = async (e) => {
     e.preventDefault();
 
-    if (!email.endsWith("@wmsu.edu.ph") && !email.endsWith("@gmail.com")) {
-      alert("Enter your WMSU email address or Gmail address.");
+    if (!email.endsWith("@wmsu.edu.ph")) {
+      alert("Enter your WMSU email address only.");
       return;
     }
 
@@ -28,8 +28,16 @@ export default function ForgotPassword() {
 
       if (!res.ok) throw new Error(data.message || "Failed to send reset link");
 
+      if (data.type === "google") {
+        alert(data.message); 
+        return;
+      }
+
       setSuccess(true);
-      setTimeout(() => navigate("/login"), 3000);
+
+      setTimeout(() => {
+        navigate(`/login?email=${encodeURIComponent(email)}`);
+      }, 3000);
     } catch (err) {
       alert(err.message);
     } finally {
@@ -45,16 +53,8 @@ export default function ForgotPassword() {
       <div className="flex w-[900px] h-[550px] bg-white bg-opacity-95 shadow-2xl rounded-2xl overflow-hidden">
         <div className="w-1/2 bg-maroon flex flex-col justify-center items-center text-white">
           <div className="flex gap-6 mb-4 relative -top-4">
-            <img
-              src="/wmsu-logo.jpg"
-              alt="WMSU Logo"
-              className="w-40 h-40 rounded-full object-cover"
-            />
-            <img
-              src="/study-squad-logo.png"
-              alt="Study Squad Logo"
-              className="w-40 h-40 rounded-full object-cover"
-            />
+            <img src="/wmsu-logo.jpg" alt="WMSU Logo" className="w-40 h-40 rounded-full object-cover" />
+            <img src="/study-squad-logo.png" alt="Study Squad Logo" className="w-40 h-40 rounded-full object-cover" />
           </div>
           <h1 className="text-3xl font-bold text-white">Crimsons Study Squad</h1>
         </div>
@@ -65,8 +65,7 @@ export default function ForgotPassword() {
           {!success ? (
             <>
               <p className="text-center text-gray-700 mb-6">
-                Enter your registered <span className="font-semibold">WMSU email or Gmail address</span> and we’ll send
-                a reset link.
+                Enter your registered <span className="font-semibold">WMSU email</span> and we’ll send a reset link.
               </p>
 
               <form onSubmit={handleReset} className="w-72 flex flex-col">

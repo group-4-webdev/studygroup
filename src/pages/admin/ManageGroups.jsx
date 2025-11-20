@@ -1,18 +1,35 @@
-import { useState, useEffect } from "react";
-import { MagnifyingGlassIcon, EyeIcon, TrashIcon, PencilIcon } from "@heroicons/react/24/solid";
-import AdminLayout from "../../layouts/AdminLayout";
+// src/pages/admin/ManageGroups.jsx
+import { useEffect, useState } from "react";
 import axios from "axios";
+import { CheckCircleIcon, XCircleIcon, UsersIcon, ClockIcon, ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/24/solid";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 export default function ManageGroups() {
-  const [searchQuery, setSearchQuery] = useState("");
   const [groups, setGroups] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+
+  const [expandedSections, setExpandedSections] = useState({
+    pending: true,
+    approved: false,
+    declined: false,
+  });
 
   const fetchGroups = async () => {
+    setLoading(true);
     try {
-      const res = await axios.get("/api/admin/groups");
-      setGroups(res.data);
+      const res = await axios.get("http://localhost:5000/api/admin/admin-list");
+      const groupList = Array.isArray(res.data)
+        ? res.data
+        : res.data?.data || res.data?.groups || [];
+      setGroups(groupList);
     } catch (err) {
       console.error(err);
+      toast.error("Failed to fetch groups");
+      setGroups([]);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -20,122 +37,147 @@ export default function ManageGroups() {
     fetchGroups();
   }, []);
 
-  const handleDelete = async (id) => {
-    if (!confirm("Are you sure you want to delete this group?")) return;
-    try {
-      await axios.delete(`/api/admin/groups/${id}`);
-      fetchGroups();
-    } catch (err) {
-      console.error(err);
-    }
+const handleApprove = async (groupId) => {
+  if (!confirm("Approve this group?")) return;
+  try {
+    await axios.patch(`http://localhost:5000/api/admin/approve/${groupId}`);
+    toast.success("Group approved! Creator will receive an email.");
+    fetchGroups();
+  } catch (err) {
+    console.error(err);
+    toast.error("Failed to approve group");
+  }
+};
+
+const handleDecline = async (groupId) => {
+  if (!confirm("Decline this group?")) return;
+  const remarks = prompt("Reason for declining this group:") || "No remarks provided";
+  try {
+    await axios.patch(`http://localhost:5000/api/admin/decline/${groupId}`, { remarks });
+    toast.info("Group declined! Creator will receive an email.");
+    fetchGroups();
+  } catch (err) {
+    console.error(err);
+    toast.error("Failed to decline group");
+  }
+};
+
+
+  const toggleSection = (section) => {
+    setExpandedSections((prev) => ({ ...prev, [section]: !prev[section] }));
   };
 
-  const handleUpdate = async (group) => {
-    const newStatus = group.status === "active" ? "full" : "active"; // example toggle
-    try {
-      await axios.put(`/api/admin/groups/${group.id}`, {
-        name: group.name,
-        course: group.course,
-        status: newStatus,
-      });
-      fetchGroups();
-    } catch (err) {
-      console.error(err);
-    }
-  };
+  if (loading) return <div className="p-10 text-center text-xl">Loading groups...</div>;
 
-  const filteredGroups = groups.filter(
-    (g) =>
-      g.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      g.course.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredGroups = groups.filter((g) => {
+    const term = search.toLowerCase();
+    return (
+      g.group_name.toLowerCase().includes(term) ||
+      g.course.toLowerCase().includes(term) ||
+      g.location.toLowerCase().includes(term) ||
+      (g.creator_name || g.created_by).toLowerCase().includes(term)
+    );
+  });
+
+  const pending = filteredGroups.filter((g) => g.status === "pending");
+  const approved = filteredGroups.filter((g) => g.status === "approved");
+  const declined = filteredGroups.filter((g) => g.status === "declined");
+
+  const renderRows = (groupArray, status) => {
+    if (!expandedSections[status]) return null;
+    return groupArray.map((group) => (
+      <tr key={group.id} className="border-b border-gray-200 hover:bg-gray-50 transition">
+        <td className="px-6 py-4">{group.group_name}</td>
+        <td className="px-6 py-4">{group.course} • {group.location}</td>
+        <td className="px-6 py-4">{group.creator_name || group.created_by}</td>
+        <td className="px-6 py-4">{group.current_members || 0} / {group.size}</td>
+        <td className="px-6 py-4">
+          {group.status === "pending" && <span className="bg-yellow-200 text-yellow-800 px-3 py-1 rounded-full text-sm font-medium">Pending</span>}
+          {group.status === "approved" && <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-bold">Approved</span>}
+          {group.status === "declined" && <span className="bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-bold">Declined</span>}
+          {group.status === "declined" && group.remarks && <p className="text-sm text-red-500 mt-1">Remark: {group.remarks}</p>}
+        </td>
+        <td className="px-6 py-4 flex justify-center gap-2">
+          {group.status === "pending" && (
+            <>
+              <button onClick={() => handleApprove(group.id)} className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-1 hover:bg-green-700 transition">
+                <CheckCircleIcon className="w-4 h-4" /> Approve
+              </button>
+              <button onClick={() => handleDecline(group.id)} className="bg-red-600 text-white px-4 py-2 rounded-lg flex items-center gap-1 hover:bg-red-700 transition">
+                <XCircleIcon className="w-4 h-4" /> Decline
+              </button>
+            </>
+          )}
+          {group.status === "approved" && <span className="text-green-700 font-medium">✔</span>}
+          {group.status === "declined" && <span className="text-red-700 font-medium">✖</span>}
+        </td>
+      </tr>
+    ));
+  };
 
   return (
-    <AdminLayout>
+    <div className="min-h-screen bg-gray-50 p-6">
+      <ToastContainer position="top-right" autoClose={3000} />
       <div className="max-w-7xl mx-auto">
-        <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-            <div>
-              <h2 className="text-2xl font-bold text-maroon">Study Groups</h2>
-              <p className="text-sm text-gray-600 mt-1">View, edit, or remove existing study groups.</p>
-            </div>
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <div className="relative flex-1 sm:flex-initial">
-                <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search by name or course..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full sm:w-80 pl-10 pr-4 py-2.5 rounded-lg bg-gray-100 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-maroon transition"
-                />
-              </div>
-            </div>
-          </div>
+        <h1 className="text-4xl font-bold text-maroon mb-4 flex items-center gap-3">
+          <UsersIcon className="w-10 h-10" /> Manage Study Groups
+        </h1>
 
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px]">
-              <thead>
-                <tr className="bg-maroon text-white text-left">
-                  <th className="px-5 py-4 font-semibold rounded-tl-lg">Group Name</th>
-                  <th className="px-5 py-4 font-semibold">Course</th>
-                  <th className="px-5 py-4 font-semibold text-center">Members</th>
-                  <th className="px-5 py-4 font-semibold">Created</th>
-                  <th className="px-5 py-4 font-semibold text-center rounded-tr-lg">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {filteredGroups.map((group) => (
-                  <tr key={group.id} className="hover:bg-gray-50 transition">
-                    <td className="px-5 py-4">
-                      <div>
-                        <p className="font-medium text-gray-900">{group.name}</p>
-                        <p className="text-xs text-gray-500">ID: {group.id}</p>
-                      </div>
-                    </td>
-                    <td className="px-5 py-4 text-gray-700">{group.course}</td>
-                    <td className="px-5 py-4 text-center">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-                          group.status === "full" ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"
-                        }`}
-                      >
-                        {group.members}/10
-                      </span>
-                    </td>
-                    <td className="px-5 py-4 text-gray-600">{group.created}</td>
-                    <td className="px-5 py-4">
-                      <div className="flex items-center justify-center gap-2">
-                        <button className="p-2 rounded-lg bg-gold/10 text-gold hover:bg-gold/20 transition">
-                          <EyeIcon className="w-4 h-4" />
-                        </button>
-                        <button
-                          className="p-2 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition"
-                          onClick={() => handleUpdate(group)}
-                        >
-                          <PencilIcon className="w-4 h-4" />
-                        </button>
-                        <button
-                          className="p-2 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 transition"
-                          onClick={() => handleDelete(group.id)}
-                        >
-                          <TrashIcon className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {filteredGroups.length === 0 && (
-            <div className="text-center py-12 text-gray-500">
-              <p>No groups found matching your search.</p>
-            </div>
-          )}
+        {/* Search / Filter */}
+        <div className="mb-4 flex items-center gap-3">
+          <input
+            type="text"
+            placeholder="Search by group, course, location, or creator..."
+            className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <button onClick={() => setSearch("")} className="bg-gray-200 px-4 py-2 rounded-lg hover:bg-gray-300">
+            Clear
+          </button>
         </div>
+
+        <table className="min-w-full bg-white border border-gray-200 rounded-xl shadow overflow-hidden">
+          <thead className="bg-gray-100">
+            <tr>
+              <th className="text-left px-6 py-3 font-semibold text-gray-700">Group Name</th>
+              <th className="text-left px-6 py-3 font-semibold text-gray-700">Course / Location</th>
+              <th className="text-left px-6 py-3 font-semibold text-gray-700">Creator</th>
+              <th className="text-left px-6 py-3 font-semibold text-gray-700">Members</th>
+              <th className="text-left px-6 py-3 font-semibold text-gray-700">Status</th>
+              <th className="text-center px-6 py-3 font-semibold text-gray-700">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {/* Pending Section */}
+            <tr className="bg-gray-50 cursor-pointer" onClick={() => toggleSection("pending")}>
+              <td colSpan={6} className="px-6 py-3 font-semibold text-yellow-800 flex justify-between items-center">
+                Pending Approval ({pending.length})
+                {expandedSections.pending ? <ChevronUpIcon className="w-5 h-5" /> : <ChevronDownIcon className="w-5 h-5" />}
+              </td>
+            </tr>
+            {renderRows(pending, "pending")}
+
+            {/* Approved Section */}
+            <tr className="bg-gray-50 cursor-pointer" onClick={() => toggleSection("approved")}>
+              <td colSpan={6} className="px-6 py-3 font-semibold text-green-800 flex justify-between items-center">
+                Approved ({approved.length})
+                {expandedSections.approved ? <ChevronUpIcon className="w-5 h-5" /> : <ChevronDownIcon className="w-5 h-5" />}
+              </td>
+            </tr>
+            {renderRows(approved, "approved")}
+
+            {/* Declined Section */}
+            <tr className="bg-gray-50 cursor-pointer" onClick={() => toggleSection("declined")}>
+              <td colSpan={6} className="px-6 py-3 font-semibold text-red-800 flex justify-between items-center">
+                Declined ({declined.length})
+                {expandedSections.declined ? <ChevronUpIcon className="w-5 h-5" /> : <ChevronDownIcon className="w-5 h-5" />}
+              </td>
+            </tr>
+            {renderRows(declined, "declined")}
+          </tbody>
+        </table>
       </div>
-    </AdminLayout>
+    </div>
   );
 }

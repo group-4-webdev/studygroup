@@ -1,13 +1,23 @@
-import { useState } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useParams, useSearchParams, Link } from "react-router-dom";
+import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/solid";
 
 export default function ResetPassword() {
   const navigate = useNavigate();
   const { token } = useParams(); 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [email, setEmail] = useState(""); 
+  const [searchParams] = useSearchParams();
+
+  useEffect(() => {
+    const emailFromURL = searchParams.get("email");
+    if (emailFromURL) setEmail(emailFromURL);
+  }, [searchParams]);
 
   const handleResetPassword = async (e) => {
     e.preventDefault();
@@ -35,7 +45,10 @@ export default function ResetPassword() {
       if (!res.ok) throw new Error(data.message || "Reset failed");
 
       setSuccess(true);
-      setTimeout(() => navigate("/login"), 3000);
+
+      setTimeout(() => {
+        navigate(`/login?email=${encodeURIComponent(email)}`);
+      }, 3000);
     } catch (err) {
       alert(err.message);
     } finally {
@@ -71,20 +84,39 @@ export default function ResetPassword() {
 
           {!success ? (
             <form onSubmit={handleResetPassword} className="w-72 flex flex-col">
-              <input
-                type="password"
-                placeholder="New Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="mb-3 p-2 rounded bg-gray-200 focus:ring-1 focus:ring-maroon"
-              />
-              <input
-                type="password"
-                placeholder="Confirm Password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="mb-4 p-2 rounded bg-gray-200 focus:ring-1 focus:ring-maroon"
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="New Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full mb-3 p-2 pr-10 rounded bg-gray-200 focus:ring-1 focus:ring-maroon"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-2 top-5 -translate-y-1/2 text-maroon"
+                >
+                  {showPassword ? <EyeSlashIcon className="w-5 h-5" /> : <EyeIcon className="w-5 h-5" />}
+                </button>
+              </div>
+
+              <div className="relative">
+                <input
+                  type={showConfirmPassword ? "text" : "password"}
+                  placeholder="Confirm Password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full mb-4 p-2 pr-10 rounded bg-gray-200 focus:ring-1 focus:ring-maroon"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-2 top-5 -translate-y-1/2 text-maroon"
+                >
+                  {showConfirmPassword ? <EyeSlashIcon className="w-5 h-5" /> : <EyeIcon className="w-5 h-5" />}
+                </button>
+              </div>
 
               <button
                 type="submit"

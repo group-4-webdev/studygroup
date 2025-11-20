@@ -11,6 +11,7 @@ import Dashboard from "./pages/users/UserDashboard.jsx";
 import InboxPage from "./pages/users/InboxPage.jsx";
 import GroupChatPage from "./pages/users/GroupChatPage.jsx";
 import CreateGroupPage from "./pages/users/CreateGroupPage.jsx";
+import GroupCreator from "./pages/users/GroupCreator.jsx";
 import SchedulesPage from "./pages/users/SchedulesPage.jsx";
 import MyStudyGroupsPage from "./pages/users/MyStudyGroupsPage.jsx";
 import ProfilePage from "./pages/users/ProfilePage.jsx";
@@ -19,6 +20,7 @@ import ContactsPage from "./pages/users/ContactsPage.jsx";
 import TermsPage from "./pages/users/TermsPage.jsx";
 import PoliciesPage from "./pages/users/PoliciesPage.jsx";
 
+import AdminLogin from "./pages/admin/AdminLogin.jsx";
 import AdminDashboard from "./pages/admin/AdminDashboard.jsx";
 import ManageUsers from "./pages/admin/ManageUsers.jsx";
 import ManageGroups from "./pages/admin/ManageGroups.jsx";
@@ -33,7 +35,6 @@ import AdminPrivateRoute from "./routes/AdminPrivateRoute.jsx";
 function App() {
   return (
     <>
-      {/* Toast container must be inside the app tree */}
       <ToastContainer 
         position="top-right" 
         autoClose={3000} 
@@ -46,39 +47,51 @@ function App() {
         pauseOnHover 
       />
 
-      <Router>
-        <Routes>
-          <Route path="/" element={<CreateAccount />} />
-          <Route path="/verify" element={<VerificationPage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password/:token" element={<ResetPassword />} />
+    <Router>
+      <Routes>
+        {/* PUBLIC ROUTES */}
+        <Route path="/" element={<CreateAccount />} />
+        <Route path="/verify" element={<VerificationPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password/:token" element={<ResetPassword />} />
 
-          <Route element={<PageLayout />}>
-            <Route path="/user-dashboard" element={<Dashboard />} />
-            <Route path="/inbox" element={<InboxPage />} />
-            <Route path="/group-chat" element={<GroupChatPage />} />
-            <Route path="/create-group" element={<CreateGroupPage />} />
-            <Route path="/schedules" element={<SchedulesPage />} />
-            <Route path="/my-study-groups" element={<MyStudyGroupsPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
-            <Route path="/about" element={<AboutPage />} />
-            <Route path="/contacts" element={<ContactsPage />} />
-            <Route path="/terms" element={<TermsPage />} />
-            <Route path="/policies" element={<PoliciesPage />} />
-          </Route>
+        {/* USER LAYOUT */}
+        <Route element={<PageLayout />}>
+          <Route path="/user-dashboard" element={<Dashboard />} />
+          <Route path="/inbox" element={<InboxPage />} />
+          <Route path="/group-chat" element={<GroupChatPage />} />
+          <Route path="/create-group" element={<CreateGroupPage />} />
+          <Route path="/group-creator" element={<GroupCreator />} />
+          <Route path="/schedules" element={<SchedulesPage />} />
+          <Route path="/my-study-groups" element={<MyStudyGroupsPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/contacts" element={<ContactsPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/policies" element={<PoliciesPage />} />
+        </Route>
 
-          <Route path="/admin" element={<AdminLayout />}>
-            <Route element={<AdminPrivateRoute />}>
-              <Route path="dashboard" element={<AdminDashboard />} />
-              <Route path="manage-users" element={<ManageUsers />} />
-              <Route path="manage-groups" element={<ManageGroups />} />
-              <Route path="reports" element={<Reports />} />
-              <Route path="settings" element={<AdminSettings />} />
-            </Route>
-          </Route>
-        </Routes>
-      </Router>
+        {/* ADMIN LOGIN (PUBLIC) */}
+        <Route path="/admin/login" element={<AdminLogin />} />
+
+        {/* ADMIN ROUTES — FIXED */}
+        <Route
+          path="/admin"
+          element={
+            <AdminPrivateRoute>
+              <AdminLayout />
+            </AdminPrivateRoute>
+          }
+        >
+          <Route path="dashboard" element={<AdminDashboard />} />
+          <Route path="manage-users" element={<ManageUsers />} />
+          <Route path="manage-groups" element={<ManageGroups />} />
+          <Route path="reports" element={<Reports />} />
+          <Route path="settings" element={<AdminSettings />} />
+        </Route>
+      </Routes>
+    </Router>
     </>
   );
 }

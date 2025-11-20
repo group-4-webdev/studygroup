@@ -13,8 +13,8 @@ export const isAllowedWMSUEmail = (email) => {
     2025: "ty",
     2024: "ae",
     2023: "hz",
-    2022: null, 
-    2021: null, 
+    2022: "eh", 
+    2021: "qb", 
   };
 
   return yearPrefixMap[year] === null || yearPrefixMap[year] === prefix;

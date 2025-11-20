@@ -52,7 +52,7 @@ export default function InboxPage() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto scrollbar-hide">
             <table className="w-full text-sm">
               <tbody>
                 {messages.map((msg) => (

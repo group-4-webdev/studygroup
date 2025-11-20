@@ -3,7 +3,7 @@ export default function AboutPage() {
       <div className="flex h-[calc(100vh-200px)] max-w-7xl mx-auto bg-white shadow-xl rounded-xl border border-gray-300 overflow-hidden">
         <div className="flex-1 flex flex-col lg:flex-row gap-0">
           <main className="flex-1 bg-white shadow-xl rounded-l-xl border border-gray-300 overflow-hidden flex flex-col">
-            <div className="flex-1 overflow-y-auto p-8 lg:p-10">
+            <div className="flex-1 overflow-y-auto scrollbar-hide p-8 lg:p-10">
               <div className="max-w-3xl mx-auto space-y-8">
                 <h1 className="text-3xl font-bold text-maroon mb-6">About Crimsons Study Squad</h1>
 

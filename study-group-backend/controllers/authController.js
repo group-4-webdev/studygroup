@@ -28,7 +28,8 @@ export const createAccount = async (req, res) => {
 
     console.log("✅ User inserted. Sending verification email to:", email);
 
-    const verificationLink = `http://localhost:5173/verify?email=${email}`;
+    const verificationLink = `http://localhost:5173/verify?email=${encodeURIComponent(email)}`;
+
     await sendEmail(
       email,
       "Verify your Crimsons Study Squad Account",
@@ -36,10 +37,17 @@ export const createAccount = async (req, res) => {
       <div style="font-family: Arial, sans-serif; line-height: 1.6;">
         <h2 style="color: #800000;">Crimsons Study Squad</h2>
         <p>Hi ${first_name},</p>
-        <p>Thank you for registering! Please verify your account using the code below:</p>
+        <p>Thank you for registering! To verify your account, copy the code below and paste it in the verification page:</p>
+        
+        <p style="font-style: italic; color: #555;">
+          Copy this code and paste it in the verification page. You can also click the link below to open the page with your email pre-filled in the same tab.
+        </p>
+
         <h3 style="background: #f4f4f4; padding: 10px; display: inline-block;">${verificationCode}</h3>
-        <p>or click the link below to verify your account:</p>
-        <a href="${verificationLink}" style="color: #800000; text-decoration: underline; font-weight: bold;">Verify Account</a>
+        <p>Alternatively, you can click the link below to open the verification page with your email pre-filled:</p>
+        <a href="${verificationLink}" style="color: #800000; text-decoration: underline; font-weight: bold;">
+          Open Verification Page
+        </a>
         <p>If you didn’t request this, you can safely ignore this email.</p>
         <br/>
         <p>– Crimsons Study Squad Team</p>
@@ -102,6 +110,20 @@ export const verifyAccount = async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+export const checkGoogleAccount = async (req, res) => {
+  const { email } = req.query;
+  try {
+    const [users] = await pool.query("SELECT * FROM users WHERE email = ?", [email]);
+    if (users.length === 0) return res.json({ isGoogleOnly: false });
+
+    const user = users[0];
+    res.json({ isGoogleOnly: !user.password && user.google_id ? true : false });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ isGoogleOnly: false });
   }
 };
 

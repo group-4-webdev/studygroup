@@ -49,7 +49,7 @@ export default function UserDashboard({ currentUserId }) {
   return (
     <div className="flex h-[calc(100vh-200px)] max-w-7xl mx-auto bg-white shadow-xl rounded-xl border border-gray-300 overflow-hidden">
       <div className="flex flex-1 flex-col lg:flex-row gap-0">
-        <main className="flex-1 p-6 overflow-y-auto">
+        <main className="flex-1 p-6 overflow-y-auto scrollbar-hide">
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-2xl font-bold text-maroon">Groups Available</h1>
             <button

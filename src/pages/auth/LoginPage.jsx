@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/solid";
 import { loginUser } from "../../utils/auth";
 import { GoogleLogin } from "@react-oauth/google";
@@ -8,38 +8,69 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
+  const [searchParams] = useSearchParams();
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  const handleLogin = async () => {
-    if (!email.endsWith("@wmsu.edu.ph")) {
-      alert("Please use your WMSU email (@wmsu.edu.ph).");
-      return;
+  useEffect(() => {
+    const emailFromURL = searchParams.get("email");
+    if (emailFromURL) {
+      setEmail(emailFromURL);
+
+      (async () => {
+        try {
+          const res = await fetch(`http://localhost:5000/api/auth/check-google?email=${encodeURIComponent(emailFromURL)}`);
+          const data = await res.json();
+          if (data.isGoogleOnly) {
+            alert("This account was created using Google Sign-In. You cannot log in with a password. Please use Google login.");
+          }
+        } catch (err) {
+          console.error("Error checking Google account:", err);
+        }
+      })();
     }
+  }, [searchParams]);
 
-    setLoading(true);
-    try {
-      const res = await fetch("http://localhost:5000/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Login failed");
+const handleLogin = async () => {
+  if (!email.endsWith("@wmsu.edu.ph")) {
+    alert("Please use your WMSU email (@wmsu.edu.ph).");
+    return;
+  }
 
-      loginUser(
-        { username: data.user.username, email: data.user.email, id: data.user._id },
-        data.token
-      );
+  setLoading(true);
 
-      navigate("/user-dashboard");
-    } catch (err) {
-      alert(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  try {
+    const res = await fetch("http://localhost:5000/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) throw new Error(data.message || "Login failed");
+
+    const userData = {
+      id: data.user.id, 
+      username: data.user.username,
+      email: data.user.email,
+      first_name: data.user.first_name,
+      last_name: data.user.last_name,
+    };
+    localStorage.setItem("user", JSON.stringify(userData));
+
+    loginUser(userData, data.token);
+
+    navigate("/user-dashboard");
+
+  } catch (err) {
+    console.error(err);
+    alert(err.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleGoogleLogin = async (credentialResponse) => {
     try {

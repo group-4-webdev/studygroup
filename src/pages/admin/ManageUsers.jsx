@@ -1,19 +1,29 @@
-import { useState, useEffect } from "react";
-import { MagnifyingGlassIcon, EyeIcon, TrashIcon, PencilIcon, CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/solid";
-import AdminLayout from "../../layouts/AdminLayout";
+// src/pages/admin/ManageUsers.jsx
+import { useEffect, useState } from "react";
 import axios from "axios";
+import {
+  ShieldCheckIcon,
+  UserIcon,
+  EnvelopeIcon,        // ← Correct name (was MailIcon)
+  UserPlusIcon
+} from "@heroicons/react/24/solid";
 
 export default function ManageUsers() {
-  const [searchQuery, setSearchQuery] = useState("");
   const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // Fetch users from backend
   const fetchUsers = async () => {
     try {
-      const res = await axios.get("/api/admin/users");
-      setUsers(res.data);
+      const res = await axios.get("http://localhost:3000/api/user/admin-list");
+      const userList = Array.isArray(res.data)
+        ? res.data
+        : res.data?.data || res.data?.users || [];
+      setUsers(userList);
     } catch (err) {
-      console.error(err);
+      console.error("Failed to fetch users:", err);
+      setUsers([]);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -21,140 +31,117 @@ export default function ManageUsers() {
     fetchUsers();
   }, []);
 
-  // Delete user
-  const handleDelete = async (id) => {
-    if (!confirm("Are you sure you want to delete this user?")) return;
+  const toggleAdmin = async (userId, currentRole) => {
+    if (!confirm(`Make this user ${currentRole === "admin" ? "regular user" : "admin"}?`)) return;
+
     try {
-      await axios.delete(`/api/admin/users/${id}`);
+      await axios.patch(`http://localhost:3000/api/user/toggle-admin/${userId}`);
       fetchUsers();
     } catch (err) {
-      console.error(err);
+      alert("Failed to update user role");
     }
   };
 
-  // Update user (example: toggle active/banned)
-  const handleUpdate = async (user) => {
-    const newStatus = user.status === "active" ? "banned" : "active";
-    try {
-      await axios.put(`/api/admin/users/${user.id}`, {
-        name: user.name,
-        email: user.email,
-        course: user.course,
-        status: newStatus,
-      });
-      fetchUsers();
-    } catch (err) {
-      console.error(err);
-    }
-  };
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-xl text-gray-600">Loading users...</p>
+      </div>
+    );
+  }
 
-  const filteredUsers = users.filter(
-    (u) =>
-      u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.course.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const admins = users.filter(u => u.role === "admin" || u.isAdmin);
+  const students = users.filter(u => u.role !== "admin" && !u.isAdmin);
 
   return (
-    <AdminLayout>
+    <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
-        <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-            <div>
-              <h2 className="text-2xl font-bold text-maroon">User Accounts</h2>
-              <p className="text-sm text-gray-600 mt-1">View, edit, or remove registered users.</p>
-            </div>
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <div className="relative flex-1 sm:flex-initial">
-                <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search users..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full sm:w-80 pl-10 pr-4 py-2.5 rounded-lg bg-gray-100 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-maroon transition"
-                />
-              </div>
-            </div>
-          </div>
+        <h1 className="text-4xl font-bold text-maroon mb-8 flex items-center gap-3">
+          <ShieldCheckIcon className="w-10 h-10" />
+          Manage Users
+        </h1>
 
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px]">
-              <thead>
-                <tr className="bg-maroon text-white text-left">
-                  <th className="px-5 py-4 font-semibold rounded-tl-lg">Name</th>
-                  <th className="px-5 py-4 font-semibold">Email</th>
-                  <th className="px-5 py-4 font-semibold">Course</th>
-                  <th className="px-5 py-4 font-semibold">Joined</th>
-                  <th className="px-5 py-4 font-semibold text-center">Status</th>
-                  <th className="px-5 py-4 font-semibold text-center rounded-tr-lg">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {filteredUsers.map((user) => (
-                  <tr key={user.id} className="hover:bg-gray-50 transition">
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-gold rounded-full flex items-center justify-center text-maroon text-xs font-bold">
-                          {user.name[0]}
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900">{user.name}</p>
-                          <p className="text-xs text-gray-500">ID: {user.id}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-5 py-4 text-gray-700">{user.email}</td>
-                    <td className="px-5 py-4 text-gray-700">{user.course}</td>
-                    <td className="px-5 py-4 text-gray-600">{user.joined}</td>
-                    <td className="px-5 py-4 text-center">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
-                          user.status === "active"
-                            ? "bg-green-100 text-green-700"
-                            : "bg-red-100 text-red-700"
-                        }`}
-                      >
-                        {user.status === "active" ? (
-                          <CheckCircleIcon className="w-3 h-3" />
-                        ) : (
-                          <XCircleIcon className="w-3 h-3" />
-                        )}
-                        {user.status.charAt(0).toUpperCase() + user.status.slice(1)}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4">
-                      <div className="flex items-center justify-center gap-2">
-                        <button className="p-2 rounded-lg bg-gold/10 text-gold hover:bg-gold/20 transition">
-                          <EyeIcon className="w-4 h-4" />
-                        </button>
-                        <button
-                          className="p-2 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition"
-                          onClick={() => handleUpdate(user)}
-                        >
-                          <PencilIcon className="w-4 h-4" />
-                        </button>
-                        <button
-                          className="p-2 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 transition"
-                          onClick={() => handleDelete(user.id)}
-                        >
-                          <TrashIcon className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {/* Admins Section */}
+        <section className="mb-12">
+          <h2 className="text-2xl font-bold text-purple-600 mb-5 flex items-center gap-2">
+            <ShieldCheckIcon className="w-7 h-7" /> Admins ({admins.length})
+          </h2>
+          <div className="grid gap-5">
+            {admins.length === 0 ? (
+              <p className="text-gray-500 bg-white p-8 rounded-xl text-center shadow">
+                No admins found
+              </p>
+            ) : (
+              admins.map(user => (
+                <div
+                  key={user._id}
+                  className="bg-purple-50 border-2 border-purple-300 p-6 rounded-xl shadow flex justify-between items-center hover:shadow-lg transition"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 bg-purple-600 rounded-full flex items-center justify-center text-white text-2xl font-bold">
+                      {user.username?.[0]?.toUpperCase() || "A"}
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-800">{user.username || user.name}</h3>
+                      <p className="text-gray-600 flex items-center gap-2">
+                        <EnvelopeIcon className="w-5 h-5" /> {user.email}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => toggleAdmin(user._id, "admin")}
+                    className="bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 font-medium flex items-center gap-2"
+                  >
+                    <UserPlusIcon className="w-5 h-5" /> Remove Admin
+                  </button>
+                </div>
+              ))
+            )}
           </div>
+        </section>
 
-          {filteredUsers.length === 0 && (
-            <div className="text-center py-12 text-gray-500">
-              <p>No users found matching your search.</p>
-            </div>
-          )}
-        </div>
+        {/* Students Section */}
+        <section>
+          <h2 className="text-2xl font-bold text-blue-600 mb-5 flex items-center gap-2">
+            <UserIcon className="w-7 h-7" /> Students ({students.length})
+          </h2>
+          <div className="grid gap-5">
+            {students.length === 0 ? (
+              <p className="text-gray-500 bg-white p-8 rounded-xl text-center shadow">
+                No students found
+              </p>
+            ) : (
+              students.map(user => (
+                <div
+                  key={user._id}
+                  className="bg-white p-6 rounded-xl shadow border hover:shadow-lg transition flex justify-between items-center"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center">
+                      <UserIcon className="w-10 h-10 text-gray-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-800">{user.username || user.name}</h3>
+                      <p className="text-gray-600 flex items-center gap-2">
+                        <EnvelopeIcon className="w-5 h-5" /> {user.email}
+                      </p>
+                      {user.studentId && (
+                        <p className="text-sm text-gray-500 mt-1">Student ID: {user.studentId}</p>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => toggleAdmin(user._id, "user")}
+                    className="bg-maroon text-white px-6 py-3 rounded-lg hover:bg-red-800 font-medium flex items-center gap-2"
+                  >
+                    <ShieldCheckIcon className="w-5 h-5" /> Make Admin
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
       </div>
-    </AdminLayout>
+    </div>
   );
 }

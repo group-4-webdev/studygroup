@@ -2,8 +2,8 @@ export default function PoliciesPage() {
   return (
       <div className="flex h-[calc(100vh-200px)] max-w-7xl mx-auto bg-white shadow-xl rounded-xl border border-gray-300 overflow-hidden">
         <div className="flex-1 bg-white shadow-xl rounded-xl border border-gray-300 overflow-hidden">
-          <div className="h-full overflow-y-auto p-8 lg:p-10">
-            <div className="max-w-4xl mx-auto space-y-8">
+          <div className="h-full overflow-y-auto scrollbar-hide p-8 lg:p-10">
+            <div className="max-w-6xl mx-auto space-y-8">
               <header className="border-b border-gray-200 pb-6">
                 <h1 className="text-3xl font-bold text-maroon">Privacy & Data Policies</h1>
                 <p className="text-sm text-gray-600 mt-2">Effective: November 11, 2025</p>

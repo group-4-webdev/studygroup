@@ -72,7 +72,7 @@ export default function SchedulesPage() {
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-8">
+          <div className="flex-1 overflow-y-auto scrollbar-hide p-8">
             <div className="bg-gray-50 rounded-lg border border-gray-300 p-4 grid grid-cols-7 gap-2 text-center text-sm">
               {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((day) => (
                 <div key={day} className="font-semibold text-maroon">{day}</div>
@@ -108,7 +108,7 @@ export default function SchedulesPage() {
           </div>
         </div>
 
-        <aside className="w-80 bg-gray-100 p-6 overflow-y-auto">
+        <aside className="w-80 bg-gray-100 p-6 overflow-y-auto scrollbar-hide">
           <h2 className="text-lg font-bold text-maroon mb-4">
             Upcoming Study Dates
           </h2>

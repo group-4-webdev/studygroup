@@ -3,7 +3,7 @@ export default function ContactsPage() {
       <div className="flex h-[calc(100vh-200px)] max-w-7xl mx-auto bg-white shadow-xl rounded-xl border border-gray-300 overflow-hidden">
         <div className="flex-1 flex flex-col lg:flex-row gap-0">
           <main className="flex-1 bg-white shadow-xl rounded-l-xl border border-gray-300 overflow-hidden flex flex-col">
-            <div className="flex-1 overflow-y-auto p-8 lg:p-10">
+            <div className="flex-1 overflow-y-auto scrollbar-hide p-8 lg:p-10">
               <div className="max-w-3xl mx-auto space-y-8">
                 <h1 className="text-3xl font-bold text-maroon mb-6">Contact Us</h1>
 
@@ -89,7 +89,7 @@ export default function ContactsPage() {
             </div>
           </main>
 
-          <aside className="w-full lg:w-80 bg-white rounded-r-xl shadow-xl border border-l-0 border-gray-300 p-8 flex flex-col gap-6 overflow-y-auto">
+          <aside className="w-full lg:w-80 bg-white rounded-r-xl shadow-xl border border-l-0 border-gray-300 p-8 flex flex-col gap-6 overflow-y-auto scrollbar-hide">
             <div className="bg-gradient-to-br from-maroon/10 to-gold/10 p-6 rounded-xl border border-maroon/20">
               <h3 className="font-bold text-maroon text-lg mb-4">Common Questions</h3>
               <ul className="space-y-3 text-sm text-gray-700">
