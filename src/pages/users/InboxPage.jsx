@@ -1,82 +1,105 @@
-import { useState } from "react";
-import {
-  StarIcon,
-  FunnelIcon,
-  Squares2X2Icon,
-} from "@heroicons/react/24/outline";
+// InboxPage.jsx
+import { useEffect, useState } from "react";
+import axios from "axios";
+import moment from "moment";
+
+const API_BASE = "http://localhost:3000";
 
 export default function InboxPage() {
-  const [messages] = useState([
-    { id: 1, name: "Alannah Dillon", message: "Join my group: Biol 41", starred: true },
-    { id: 2, name: "Joyce Nelson", message: "Mathematicians", starred: false },
-    { id: 3, name: "Louie Ventura", message: "Please change time for next meeting", starred: false },
-    { id: 4, name: "Olive Maynard", message: "Joined Mathematicians", starred: true },
-    { id: 5, name: "Subhan Frederick", message: "Looking for group member for Math 143 Group", starred: false },
-    { id: 6, name: "Maha Decker", message: "Creating study date for Quiz 4", starred: false },
-    { id: 7, name: "Kelsey Zavala", message: "Date/Time for next meeting?", starred: false },
-    { id: 8, name: "Clarice Preston", message: "When is next the homework meeting?", starred: false },
-    { id: 9, name: "Taliah Peters", message: "Pop Quiz today?", starred: false },
-    { id: 10, name: "Cristiano Nicholls", message: "Who is creating the study date?", starred: true },
-    { id: 11, name: "Annalise Phan", message: "Working on study guide!", starred: false },
-  ]);
+  const userId = localStorage.getItem("userId"); // logged-in user
+  const [groups, setGroups] = useState([]);
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!userId) return;
+
+    // 1. Fetch all groups for this user
+    const fetchUserGroups = async () => {
+      try {
+        const res = await axios.get(`${API_BASE}/api/groups/user/${userId}`);
+        if (res.data.success) {
+          setGroups(res.data.groups || []);
+          return res.data.groups || [];
+        }
+        return [];
+      } catch (err) {
+        console.error("Failed to fetch groups:", err);
+        return [];
+      }
+    };
+
+    // 2. Fetch messages for each group
+    const fetchMessages = async () => {
+      setLoading(true);
+      try {
+        const userGroups = await fetchUserGroups();
+        let allMessages = [];
+
+        for (const g of userGroups) {
+          const res = await axios.get(`${API_BASE}/api/groups/${g.id}/messages`);
+          if (res.data.success && res.data.messages) {
+            const groupMessages = res.data.messages.map((m) => ({
+              ...m,
+              groupName: g.group_name,
+            }));
+            allMessages = [...allMessages, ...groupMessages];
+          }
+        }
+
+        // sort messages by time descending
+        allMessages.sort((a, b) => new Date(b.time) - new Date(a.time));
+        setMessages(allMessages);
+      } catch (err) {
+        console.error("Failed to fetch messages:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchMessages();
+
+    // Optional: refresh every 15 seconds
+    const interval = setInterval(fetchMessages, 15000);
+    return () => clearInterval(interval);
+  }, [userId]);
 
   return (
-      <div className="flex h-[calc(100vh-200px)] max-w-7xl mx-auto bg-white shadow-xl rounded-xl border border-gray-300 overflow-hidden">
-        <aside className="w-64 bg-maroon text-white p-4 flex flex-col">
-          <h2 className="font-bold text-lg mb-4 flex items-center gap-2">
-            Study Squad Inbox
-          </h2>
-
-          <nav className="flex flex-col space-y-2 text-sm">
-            <button className="text-left p-2 rounded hover:bg-white hover:text-maroon">All Messages</button>
-            <button className="text-left p-2 rounded hover:bg-white hover:text-maroon">Starred</button>
-            <button className="text-left p-2 rounded hover:bg-white hover:text-maroon">Archived</button>
-            <button className="text-left p-2 rounded hover:bg-white hover:text-maroon">Deleted</button>
-          </nav>
-        </aside>
-
-        <main className="flex-1 flex flex-col bg-white border border-gray-300">
-          <div className="flex items-center justify-between p-4 border-b bg-gray-50">
-            <div className="flex items-center gap-2 flex-1">
-              <input
-                type="text"
-                placeholder="Search Inbox"
-                className="flex-1 p-2 rounded-lg bg-gray-100 border border-gray-300 focus:ring-2 focus:ring-gold"
-              />
-              <button className="p-2 rounded hover:bg-gray-200">
-                <FunnelIcon className="w-5 h-5 text-maroon" />
-              </button>
-              <button className="p-2 rounded hover:bg-gray-200">
-                <Squares2X2Icon className="w-5 h-5 text-maroon" />
-              </button>
+    <div className="max-w-4xl mx-auto p-6">
+      <h1 className="text-2xl font-bold text-maroon mb-4">Inbox</h1>
+      {loading ? (
+        <p className="text-gray-600">Loading messages…</p>
+      ) : messages.length === 0 ? (
+        <p className="text-gray-500">No messages yet.</p>
+      ) : (
+        <div className="space-y-3">
+          {messages.map((msg) => (
+            <div
+              key={msg.id}
+              className="border rounded-lg p-3 bg-white shadow-sm hover:bg-gray-50"
+            >
+              <p className="text-sm text-gray-600">
+                <span className="font-semibold">{msg.sender}</span> sent a message to{" "}
+                <span className="font-semibold">{msg.groupName}</span>:
+              </p>
+              {msg.text && <p className="mt-1 text-gray-800">{msg.text}</p>}
+              {msg.file_link && (
+                <a
+                  href={msg.file_link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 underline text-sm mt-1 block"
+                >
+                  View attachment
+                </a>
+              )}
+              <p className="text-xs text-gray-400 mt-1">
+                {moment(msg.time).format("ddd, MMM D, YYYY h:mm A")}
+              </p>
             </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto">
-            <table className="w-full text-sm">
-              <tbody>
-                {messages.map((msg) => (
-                  <tr
-                    key={msg.id}
-                    className="hover:bg-gray-100 cursor-pointer border-b"
-                  >
-                    <td className="p-3 w-10 text-center">
-                      {msg.starred ? (
-                        <StarIcon className="w-5 h-5 text-gold fill-gold" />
-                      ) : (
-                        <StarIcon className="w-5 h-5 text-gray-400 hover:text-gold" />
-                      )}
-                    </td>
-                    <td className="p-3 font-medium text-maroon w-1/4">
-                      {msg.name}
-                    </td>
-                    <td className="p-3 text-gray-700">{msg.message}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </main>
-      </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

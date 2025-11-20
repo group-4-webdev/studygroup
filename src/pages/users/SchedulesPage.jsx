@@ -2,22 +2,11 @@
 import { useEffect, useState, useMemo } from "react";
 import { gapi } from "gapi-script";
 import axios from "axios";
-import {
-  CalendarDaysIcon,
-  ArrowPathIcon,
-} from "@heroicons/react/24/outline";
-
+import { CalendarDaysIcon, ArrowPathIcon } from "@heroicons/react/24/outline";
 import { Calendar as BigCalendar, momentLocalizer } from "react-big-calendar";
 import moment from "moment-timezone";
+import Modal from "react-modal";
 import "react-big-calendar/lib/css/react-big-calendar.css";
-
-/*
-  Big SchedulesPage with react-big-calendar integration
-  - Merges backend schedules and Google Calendar events
-  - Color-coded by type (study-group themed)
-  - Displays Title + time + location in event title
-  - Keeps your existing form and upcoming list
-*/
 
 const CLIENT_ID = "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com";
 const API_KEY = "YOUR_GOOGLE_API_KEY";
@@ -26,55 +15,58 @@ const SCOPES =
 const DISCOVERY_DOCS = [
   "https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest",
 ];
-const API_BASE = "http://localhost:3000"; // change if backend uses other port
+const API_BASE = "http://localhost:3000";
 
-// timezone
 const TZ = "Asia/Manila";
 moment.tz.setDefault(TZ);
 const localizer = momentLocalizer(moment);
 
-// color map for types (study-group themed)
 const TYPE_COLORS = {
-  group: "#7a1422", // maroon-ish
-  personal: "#f6c555", // gold/yellow
-  exam: "#e53e3e", // red
-  task: "#16a34a", // green
-  google: "#f6c555", // google events default to personal/gold
+  group: "#7a1422",
+  personal: "#f6c555",
+  exam: "#e53e3e",
+  task: "#16a34a",
+  google: "#f6c555",
   default: "#7a1422",
 };
 
 export default function SchedulesPage() {
   const userId = localStorage.getItem("userId") || null;
 
-  // UI & Auth
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [loadingGapi, setLoadingGapi] = useState(true);
 
-  // form fields
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [location, setLocation] = useState("");
 
-  // attendees / groups (keeps prior functionality)
   const [attendeeEmailInput, setAttendeeEmailInput] = useState("");
   const [attendees, setAttendees] = useState([]);
   const [groups, setGroups] = useState([]);
   const [selectedGroupId, setSelectedGroupId] = useState("");
 
-  // schedules state
   const [backendSchedules, setBackendSchedules] = useState([]);
-  const [mergedSchedules, setMergedSchedules] = useState([]); // normalized merged items
-  const [calendarEvents, setCalendarEvents] = useState([]); // mapped for react-big-calendar
+  const [mergedSchedules, setMergedSchedules] = useState([]);
+  const [calendarEvents, setCalendarEvents] = useState([]);
 
-  // misc UI
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMerge, setLoadingMerge] = useState(false);
   const [error, setError] = useState(null);
 
-  // initialize gapi
+  // Edit modal states
+  const [editingSchedule, setEditingSchedule] = useState(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editStart, setEditStart] = useState("");
+  const [editEnd, setEditEnd] = useState("");
+  const [editLocation, setEditLocation] = useState("");
+  const [editAttendees, setEditAttendees] = useState([]);
+  const [editAttendeeInput, setEditAttendeeInput] = useState("");
+
+  // --- Initialization & fetching ---
   useEffect(() => {
     const init = async () => {
       try {
@@ -85,7 +77,6 @@ export default function SchedulesPage() {
           discoveryDocs: DISCOVERY_DOCS,
           scope: SCOPES,
         });
-
         const auth = gapi.auth2.getAuthInstance();
         setIsSignedIn(auth.isSignedIn.get());
         auth.isSignedIn.listen((val) => setIsSignedIn(val));
@@ -95,46 +86,38 @@ export default function SchedulesPage() {
         setLoadingGapi(false);
       }
     };
-
     init();
     fetchUserGroups();
     fetchBackendSchedules();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // fetch groups for attendee autofill (non-blocking)
   const fetchUserGroups = async () => {
     if (!userId) return;
     try {
-      const res = await axios.get(`${API_BASE}/api/group/user/${userId}`);
-      const myGroups = res.data.groups || res.data || [];
-      setGroups(myGroups);
+      const res = await axios.get(`${API_BASE}/api/schedules/group/user/${userId}`);
+      setGroups(res.data.groups || []);
     } catch (e) {
-      console.warn("Could not fetch groups for attendees autofill", e);
+      console.warn("Failed to fetch groups", e);
     }
   };
 
-  // fetch backend schedules then merge
   const fetchBackendSchedules = async () => {
-    if (!userId) {
-      setBackendSchedules([]);
-      return;
-    }
+    if (!userId) return;
     setRefreshing(true);
     try {
       const res = await axios.get(`${API_BASE}/api/schedules/user/${userId}`);
-      const backend = res.data.schedules || res.data || [];
+      const backend = (res.data.schedules || []).map((s) => ({
+        ...s,
+        attendees: s.attendees || [],
+      }));
       setBackendSchedules(backend);
-      // merge with Google when possible
+
       if (isSignedIn) {
         setLoadingMerge(true);
         const merged = await mergeWithGoogleEvents(backend);
         setMergedSchedules(merged);
         setLoadingMerge(false);
-      } else {
-        // normalize backend for display
-        setMergedSchedules(normalizeBackend(backend));
-      }
+      } else setMergedSchedules(backend);
     } catch (e) {
       console.error("Failed to fetch schedules", e);
       setError("Failed to load schedules");
@@ -143,37 +126,11 @@ export default function SchedulesPage() {
     }
   };
 
-  // on sign-in state change, refresh merged schedules
-  useEffect(() => {
-    fetchBackendSchedules();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSignedIn]);
-
-  // normalize backend schedule objects
-  const normalizeBackend = (backendList) =>
-    (backendList || []).map((s) => ({
-      source: "local",
-      id: s.id || s._id || null,
-      googleEventId: s.googleEventId || null,
-      title: s.title,
-      description: s.description || "",
-      start: s.start,
-      end: s.end,
-      location: s.location || "",
-      attendees: s.attendees || [],
-      type: s.type || "group", // allow backend to provide type: group|personal|exam|task
-    }));
-
-  // Merge backend + google events
   const mergeWithGoogleEvents = async (backendList) => {
     try {
-      const normalizedBackend = normalizeBackend(backendList);
-
-      // fetch Google events for +/- 30 days
       const now = new Date();
       const timeMin = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
       const timeMax = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
-
       const resp = await gapi.client.calendar.events.list({
         calendarId: "primary",
         timeMin,
@@ -183,137 +140,52 @@ export default function SchedulesPage() {
         orderBy: "startTime",
       });
 
-      const googleEventsRaw = resp.result.items || [];
-
-      const googleEvents = googleEventsRaw.map((ev) => ({
+      const googleEvents = (resp.result.items || []).map((ev) => ({
         source: "google",
         googleEventId: ev.id,
         title: ev.summary || "(No title)",
         description: ev.description || "",
-        // prefer dateTime, fallback to date (all-day)
         start: ev.start?.dateTime || ev.start?.date,
         end: ev.end?.dateTime || ev.end?.date,
         location: ev.location || "",
         attendees: (ev.attendees || []).map((a) => ({ email: a.email })),
-        type: "personal", // treat google events as personal by default
+        type: "personal",
       }));
 
-      // Index backend by googleEventId
       const byGoogleId = {};
-      normalizedBackend.forEach((b) => {
+      backendList.forEach((b) => {
         if (b.googleEventId) byGoogleId[b.googleEventId] = b;
       });
 
-      // Start merged with backend items (authoritative)
-      const merged = [...normalizedBackend];
-
-      // Add google events that don't exist in backend
+      const merged = [...backendList];
       googleEvents.forEach((g) => {
-        if (!byGoogleId[g.googleEventId]) {
-          merged.push(g);
-        }
+        if (!byGoogleId[g.googleEventId]) merged.push(g);
       });
 
-      // Sort by start time
       merged.sort((a, b) => new Date(a.start) - new Date(b.start));
-
       return merged;
     } catch (e) {
       console.error("Failed to merge with Google events", e);
-      return normalizeBackend(backendList);
+      return backendList;
     }
   };
 
-  // Map mergedSchedules -> react-big-calendar events
-  useEffect(() => {
-    const mapped = (mergedSchedules || []).map((s) => {
-      // parse start/end that may be date-only or dateTime strings
-      let startDate = s.start ? new Date(s.start) : new Date();
-      let endDate = s.end ? new Date(s.end) : new Date(startDate.getTime() + 60 * 60 * 1000);
-
-      // Build display title: Title — time → time @ Location
-      // For all-day events (date-only), show date only.
-      const isAllDay =
-        String(s.start).length <= 10 && String(s.end).length <= 10 && !s.start.includes("T");
-
-      const startTimeStr = isAllDay
-        ? new Date(s.start).toLocaleDateString("en-PH")
-        : moment(startDate).format("h:mm A");
-      const endTimeStr = isAllDay ? "" : moment(endDate).format("h:mm A");
-
-      const timePart = isAllDay ? `${startTimeStr}` : `${startTimeStr} → ${endTimeStr}`;
-      const locPart = s.location ? ` @ ${s.location}` : "";
-
-      const titleText = `${s.title}${locPart ? " – " + timePart + locPart : " – " + timePart}`;
-
-      // Determine type/color
-      const typeKey = s.type || (s.source === "google" ? "google" : "group");
-      const color = TYPE_COLORS[typeKey] || TYPE_COLORS.default;
-
-      return {
-        ...s,
-        title: titleText,
-        start: startDate,
-        end: endDate,
-        allDay: isAllDay,
-        _bgColor: color,
-        _typeKey: typeKey,
-      };
-    });
-
-    setCalendarEvents(mapped);
-  }, [mergedSchedules]);
-
-  // Calendar event style getter (color coding)
-  const eventStyleGetter = (event) => {
-    const backgroundColor = event._bgColor || TYPE_COLORS.default;
-    const style = {
-      backgroundColor,
-      borderRadius: "6px",
-      color: typeIsDark(backgroundColor) ? "white" : "black",
-      border: "none",
-      padding: "2px 4px",
-      fontSize: "0.85rem",
-    };
-    return { style };
-  };
-
-  // small util: determine if backgroundColor is dark for text color
-  const typeIsDark = (hex) => {
-    if (!hex) return true;
-    const h = hex.replace("#", "");
-    const r = parseInt(h.substring(0, 2), 16);
-    const g = parseInt(h.substring(2, 4), 16);
-    const b = parseInt(h.substring(4, 6), 16);
-    // luminance
-    const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    return luminance < 140;
-  };
-
-  // map user input attendees
   const addAttendeeFromInput = () => {
     const email = attendeeEmailInput.trim();
     if (!email) return;
     const re = /\S+@\S+\.\S+/;
-    if (!re.test(email)) {
-      alert("Please enter a valid email address.");
-      return;
-    }
-    if (!attendees.find((a) => a.email === email)) {
-      setAttendees((prev) => [...prev, { email }]);
-    }
+    if (!re.test(email)) return alert("Enter valid email");
+    if (!attendees.find((a) => a.email === email)) setAttendees([...attendees, { email }]);
     setAttendeeEmailInput("");
   };
 
-  const removeAttendee = (email) => {
-    setAttendees((prev) => prev.filter((a) => a.email !== email));
-  };
+  const removeAttendee = (email) => setAttendees(attendees.filter((a) => a.email !== email));
 
   const fetchGroupMembers = async (groupId) => {
     if (!groupId) return;
     try {
-      const res = await axios.get(`${API_BASE}/api/group/${groupId}/members`);
-      const members = res.data.members || res.data || [];
+      const res = await axios.get(`${API_BASE}/api/schedules/group/${groupId}/members`);
+      const members = res.data.members || [];
       const mapped = members.map((m) => ({ email: m.email })).filter(Boolean);
       setAttendees((prev) => {
         const merged = [...prev];
@@ -323,84 +195,65 @@ export default function SchedulesPage() {
         return merged;
       });
     } catch (e) {
-      console.warn("Failed to fetch group members; backend may not have endpoint", e);
-      alert("Unable to load group members. You can still type attendee emails manually.");
+      console.warn(e);
+      alert("Unable to load group members. Add manually if needed.");
     }
   };
 
-  // create google event (with attendees) and return googleEventId
-  const createGoogleEvent = async ({
-    title,
-    description,
-    startISO,
-    endISO,
-    location,
-    attendees: attendeesArr,
-  }) => {
+  const createGoogleEvent = async ({ title, description, startISO, endISO, location, attendees: attendeesArr }) => {
     try {
       const auth = gapi.auth2.getAuthInstance();
-      if (!auth || !auth.isSignedIn.get()) return null;
-
-      const eventPayload = {
-        summary: title,
-        description: description || "",
-        start: { dateTime: startISO, timeZone: TZ },
-        end: { dateTime: endISO, timeZone: TZ },
-        location: location || "",
-        attendees: attendeesArr && attendeesArr.length ? attendeesArr : undefined,
-      };
-
+      if (!auth?.isSignedIn.get()) return null;
       const resp = await gapi.client.calendar.events.insert({
         calendarId: "primary",
-        resource: eventPayload,
+        resource: {
+          summary: title,
+          description: description || "",
+          start: { dateTime: startISO, timeZone: TZ },
+          end: { dateTime: endISO, timeZone: TZ },
+          location: location || "",
+          attendees: attendeesArr.length ? attendeesArr : undefined,
+        },
       });
-
       return resp.result?.id || null;
     } catch (e) {
-      console.error("Google Calendar insert error:", e);
+      console.error(e);
       return null;
     }
   };
 
-  // save to backend
   const saveScheduleToBackend = async (payload) => {
     try {
-      const res = await axios.post(`${API_BASE}/api/schedules`, payload);
-      return res.data;
+      await axios.post(`${API_BASE}/api/schedules`, payload);
     } catch (e) {
-      console.error("Failed to save schedule to backend", e);
+      console.error(e);
       throw e;
     }
   };
 
-  // create schedule handler with validation + attendees + google sync
-  const handleCreate = async () => {
-    if (!userId) {
-      alert("You must be logged in (app account) to create schedules.");
-      return;
+  const deleteSchedule = async (scheduleId) => {
+    if (!window.confirm("Delete this schedule?")) return;
+    try {
+      await axios.delete(`${API_BASE}/api/schedules/${scheduleId}`);
+      fetchBackendSchedules();
+      alert("Schedule deleted");
+    } catch (e) {
+      console.error(e);
+      alert("Failed to delete schedule");
     }
-    if (!title || !start || !end) {
-      alert("Please provide at least a title, start and end time.");
-      return;
-    }
-    const startDt = new Date(start);
-    const endDt = new Date(end);
-    if (endDt <= startDt) {
-      alert("End time must be later than start time.");
-      return;
-    }
+  };
 
-    setSaving(true);
-    setError(null);
+  const handleCreate = async () => {
+    if (!userId) return alert("Login required");
+    if (!title || !start || !end) return alert("Provide title/start/end");
 
     const startISO = new Date(start).toISOString();
     const endISO = new Date(end).toISOString();
-
-    // attendees array of {email}
     const attendeesPayload = attendees.map((a) => ({ email: a.email }));
 
+    setSaving(true);
     let googleEventId = null;
-    if (isSignedIn) {
+    if (isSignedIn)
       googleEventId = await createGoogleEvent({
         title,
         description,
@@ -409,28 +262,19 @@ export default function SchedulesPage() {
         location,
         attendees: attendeesPayload,
       });
-      if (!googleEventId) {
-        console.warn("Google event create failed — will still save to backend.");
-      }
-    }
-
-    // payload
-    const payload = {
-      userId,
-      title,
-      description,
-      start: startISO,
-      end: endISO,
-      location,
-      googleEventId,
-      attendees: attendeesPayload,
-      // allow type classification (default to 'group')
-      type: "group",
-    };
 
     try {
-      await saveScheduleToBackend(payload);
-      // reset form
+      await saveScheduleToBackend({
+        userId,
+        title,
+        description,
+        start: startISO,
+        end: endISO,
+        location,
+        attendees: attendeesPayload,
+        googleEventId,
+        type: "group",
+      });
       setTitle("");
       setDescription("");
       setStart("");
@@ -439,84 +283,123 @@ export default function SchedulesPage() {
       setAttendees([]);
       setAttendeeEmailInput("");
       setSelectedGroupId("");
-      // refresh schedules
       fetchBackendSchedules();
-      alert("Schedule created" + (googleEventId ? " and added to your Google Calendar." : "."));
-    } catch (e) {
-      setError("Failed to save schedule in backend.");
-      alert("Failed to save schedule to backend. Check console.");
+      alert(
+        "Schedule created" + (googleEventId ? " and added to Google Calendar." : ".")
+      );
+    } catch {
+      alert("Failed to save schedule");
     } finally {
       setSaving(false);
     }
   };
 
-  // sign in / out
   const signIn = async () => {
-    try {
-      const auth = gapi.auth2.getAuthInstance();
-      await auth.signIn();
-      setIsSignedIn(auth.isSignedIn.get());
-      fetchBackendSchedules();
-    } catch (e) {
-      console.error("Sign in failed", e);
-      alert("Google sign-in failed. Check console.");
-    }
+    const auth = gapi.auth2.getAuthInstance();
+    await auth.signIn();
+    setIsSignedIn(auth.isSignedIn.get());
+    fetchBackendSchedules();
   };
 
   const signOut = async () => {
+    const auth = gapi.auth2.getAuthInstance();
+    await auth.signOut();
+    setIsSignedIn(auth.isSignedIn.get());
+    fetchBackendSchedules();
+  };
+
+  // --- Edit / Modal Functions ---
+  const openEditModal = (schedule) => {
+    setEditingSchedule(schedule);
+    setEditTitle(schedule.title);
+    setEditDescription(schedule.description || "");
+    setEditStart(moment(schedule.start).format("YYYY-MM-DDTHH:mm"));
+    setEditEnd(moment(schedule.end).format("YYYY-MM-DDTHH:mm"));
+    setEditLocation(schedule.location || "");
+    setEditAttendees(schedule.attendees || []);
+  };
+
+  const addEditAttendee = () => {
+    const email = editAttendeeInput.trim();
+    if (!email) return;
+    const re = /\S+@\S+\.\S+/;
+    if (!re.test(email)) return alert("Enter valid email");
+    if (!editAttendees.find((a) => a.email === email))
+      setEditAttendees([...editAttendees, { email }]);
+    setEditAttendeeInput("");
+  };
+
+  const removeEditAttendee = (email) =>
+    setEditAttendees(editAttendees.filter((a) => a.email !== email));
+
+  const handleSaveEdit = async () => {
+    if (!editingSchedule) return;
+    const payload = {
+      title: editTitle,
+      description: editDescription,
+      start: new Date(editStart).toISOString(),
+      end: new Date(editEnd).toISOString(),
+      location: editLocation,
+      attendees: editAttendees,
+    };
+
     try {
-      const auth = gapi.auth2.getAuthInstance();
-      await auth.signOut();
-      setIsSignedIn(auth.isSignedIn.get());
+      await axios.put(`${API_BASE}/api/schedules/${editingSchedule.id}`, payload);
+
+      if (isSignedIn && editingSchedule.googleEventId) {
+        await gapi.client.calendar.events.update({
+          calendarId: "primary",
+          eventId: editingSchedule.googleEventId,
+          resource: {
+            summary: payload.title,
+            description: payload.description || "",
+            start: { dateTime: payload.start, timeZone: TZ },
+            end: { dateTime: payload.end, timeZone: TZ },
+            location: payload.location || "",
+            attendees: payload.attendees.length ? payload.attendees : undefined,
+          },
+        });
+      }
+
       fetchBackendSchedules();
+      setEditingSchedule(null);
+      alert("Schedule updated successfully");
     } catch (e) {
-      console.error("Sign out failed", e);
+      console.error(e);
+      alert("Failed to update schedule");
     }
   };
 
-  // Calendar event click handler
-  const onSelectEvent = (ev) => {
-    // show details quickly; replace with a modal if you want
-    const startStr = moment(ev.start).format("ddd, MMM D, YYYY h:mm A");
-    const endStr = moment(ev.end).format("ddd, MMM D, YYYY h:mm A");
-    const attendeesList = (ev.attendees || []).map((a) => a.email || a).join(", ") || "None";
-    alert(
-      `${ev.title.replace(/\s{2,}/g, " ")}\n\n${ev.description || ""}\n\nWhen: ${startStr} → ${endStr}\nLocation: ${
-        ev.location || "None"
-      }\nAttendees: ${attendeesList}`
-    );
+  const handleDeleteEdit = async () => {
+    if (!editingSchedule) return;
+    if (!window.confirm("Delete this schedule?")) return;
+    try {
+      await axios.delete(`${API_BASE}/api/schedules/${editingSchedule.id}`);
+      setEditingSchedule(null);
+      fetchBackendSchedules();
+      alert("Schedule deleted");
+    } catch (e) {
+      console.error(e);
+      alert("Failed to delete schedule");
+    }
   };
 
-  // legend component (small)
-  const Legend = () => (
-    <div className="flex gap-3 items-center text-xs mb-2">
-      <LegendItem color={TYPE_COLORS.group} label="Group" />
-      <LegendItem color={TYPE_COLORS.personal} label="Personal / Google" />
-      <LegendItem color={TYPE_COLORS.exam} label="Exam" />
-      <LegendItem color={TYPE_COLORS.task} label="Task" />
-    </div>
-  );
-  const LegendItem = ({ color, label }) => (
-    <div className="flex items-center gap-2">
-      <div style={{ width: 14, height: 10, background: color, borderRadius: 4 }} />
-      <div>{label}</div>
-    </div>
-  );
+  const onSelectEvent = (ev) => openEditModal(ev);
 
-  // derive calendar default view and events via memo
   const calendarView = useMemo(() => ["month", "week", "day"], []);
   useEffect(() => {
-    setCalendarEvents(
-      (mergedSchedules || []).map((s) => ({
-        ...s,
-        start: s.start ? new Date(s.start) : new Date(),
-        end: s.end ? new Date(s.end) : new Date(new Date(s.start).getTime() + 60 * 60 * 1000),
-      }))
-    );
+    const mapped = (mergedSchedules || []).map((s) => ({
+      ...s,
+      start: new Date(s.start),
+      end: new Date(s.end),
+    }));
+    setCalendarEvents(mapped);
   }, [mergedSchedules]);
 
+  // --- RETURN UI ---
   return (
     <div className="max-w-7xl mx-auto p-6">
+      {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-maroon">Schedules</h1>
@@ -552,6 +435,7 @@ export default function SchedulesPage() {
         </div>
       </div>
 
+      {/* Left Form & Calendar */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         {/* Left Form */}
         <div className="lg:col-span-1 bg-white border rounded-lg p-4 shadow-sm">
@@ -657,10 +541,7 @@ export default function SchedulesPage() {
             </select>
             <button
               onClick={() => {
-                if (!selectedGroupId) {
-                  alert("Choose a group first.");
-                  return;
-                }
+                if (!selectedGroupId) return alert("Choose a group first.");
                 fetchGroupMembers(selectedGroupId);
               }}
               className="px-3 py-2 bg-gold text-maroon rounded border"
@@ -677,7 +558,6 @@ export default function SchedulesPage() {
             >
               {saving ? "Saving…" : "Create & Save"}
             </button>
-
             <button
               onClick={() => {
                 setTitle("");
@@ -694,35 +574,29 @@ export default function SchedulesPage() {
               Clear
             </button>
           </div>
-
           <p className="mt-3 text-xs text-gray-500">
             Events saved to backend and (if signed-in) to Google Calendar.
           </p>
         </div>
 
-        {/* Upcoming list */}
+        {/* Calendar */}
         <div className="lg:col-span-2 bg-white border rounded-lg p-4 shadow-sm">
           <div className="flex justify-between items-center mb-3">
             <div>
               <h2 className="font-semibold text-maroon">Upcoming Sessions</h2>
-              <Legend />
             </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={fetchBackendSchedules}
-                className="text-sm px-2 py-1 border rounded flex items-center gap-2"
-                disabled={refreshing}
-              >
-                {refreshing ? "Refreshing…" : "Refresh"}
-              </button>
-            </div>
+            <button
+              onClick={fetchBackendSchedules}
+              className="text-sm px-2 py-1 border rounded flex items-center gap-2"
+              disabled={refreshing}
+            >
+              {refreshing ? "Refreshing…" : "Refresh"}
+            </button>
           </div>
 
           {error && <p className="text-sm text-red-600 mb-2">{error}</p>}
           {loadingMerge && <p className="text-sm text-gray-600 mb-2">Merging Google Calendar events...</p>}
 
-          {/* react-big-calendar */}
           <div style={{ height: 550 }}>
             <BigCalendar
               localizer={localizer}
@@ -732,73 +606,127 @@ export default function SchedulesPage() {
               startAccessor="start"
               endAccessor="end"
               style={{ height: "100%" }}
-              eventPropGetter={eventStyleGetter}
+              eventPropGetter={(e) => ({
+                style: {
+                  backgroundColor: TYPE_COLORS[e.type || "group"],
+                  color: "white",
+                  borderRadius: 6,
+                  padding: "2px 4px",
+                  fontSize: "0.85rem",
+                },
+              })}
               onSelectEvent={onSelectEvent}
-              popup
-              tooltipAccessor={(event) => `${event.title}\n${event.location || ""}`}
             />
-          </div>
-
-          {/* small upcoming list below calendar (keeps original list) */}
-          <div className="mt-4">
-            {mergedSchedules.length === 0 ? (
-              <p className="text-sm text-gray-600">No scheduled sessions yet.</p>
-            ) : (
-              <ul className="space-y-3">
-                {mergedSchedules.map((s) => {
-                  const startTime = new Date(s.start).toLocaleString("en-PH", {
-                    timeZone: TZ,
-                    dateStyle: "medium",
-                    timeStyle: "short",
-                  });
-                  const endTime = new Date(s.end).toLocaleString("en-PH", {
-                    timeZone: TZ,
-                    dateStyle: "medium",
-                    timeStyle: "short",
-                  });
-
-                  return (
-                    <li
-                      key={s.id || s._id || s.googleEventId || `${s.start}-${s.title}`}
-                      className="p-3 border rounded"
-                    >
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <div className="font-semibold text-maroon">{s.title}</div>
-                          <div className="text-xs text-gray-600">{s.description}</div>
-
-                          <div className="text-xs text-gray-700 mt-2">
-                            <CalendarDaysIcon className="inline-block w-4 h-4 mr-1" />
-                            {startTime} — {endTime}
-                          </div>
-
-                          {s.location && (
-                            <div className="text-xs text-gray-700 mt-1">
-                              Location: {s.location}
-                            </div>
-                          )}
-
-                          {s.attendees && s.attendees.length > 0 && (
-                            <div className="text-xs text-gray-700 mt-1">
-                              Attendees: {s.attendees.map((a) => a.email || a).join(", ")}
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="text-right">
-                          <div className="text-xs text-gray-500">
-                            {s.googleEventId ? "Synced (Google)" : "Local"}
-                          </div>
-                        </div>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
           </div>
         </div>
       </div>
+
+      {/* Edit Modal */}
+      <Modal
+        isOpen={!!editingSchedule}
+        onRequestClose={() => setEditingSchedule(null)}
+        contentLabel="Edit Schedule"
+        className="bg-white max-w-lg mx-auto mt-20 p-6 rounded shadow-lg outline-none"
+        overlayClassName="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50"
+      >
+        <h2 className="text-xl font-bold text-maroon mb-3">Edit Schedule</h2>
+
+        <label className="block text-sm text-gray-700">Title</label>
+        <input
+          value={editTitle}
+          onChange={(e) => setEditTitle(e.target.value)}
+          className="w-full p-2 rounded border mt-1 mb-3"
+        />
+
+        <label className="block text-sm text-gray-700">Description</label>
+        <textarea
+          value={editDescription}
+          onChange={(e) => setEditDescription(e.target.value)}
+          className="w-full p-2 rounded border mt-1 mb-3"
+          rows={3}
+        />
+
+        <label className="block text-sm text-gray-700">Start</label>
+        <input
+          type="datetime-local"
+          value={editStart}
+          onChange={(e) => setEditStart(e.target.value)}
+          className="w-full p-2 rounded border mt-1 mb-3"
+        />
+
+        <label className="block text-sm text-gray-700">End</label>
+        <input
+          type="datetime-local"
+          value={editEnd}
+          onChange={(e) => setEditEnd(e.target.value)}
+          className="w-full p-2 rounded border mt-1 mb-3"
+        />
+
+        <label className="block text-sm text-gray-700">Location</label>
+        <input
+          value={editLocation}
+          onChange={(e) => setEditLocation(e.target.value)}
+          className="w-full p-2 rounded border mt-1 mb-3"
+        />
+
+        <label className="block text-sm text-gray-700">Attendees</label>
+        <div className="flex gap-2 mb-2">
+          <input
+            value={editAttendeeInput}
+            onChange={(e) => setEditAttendeeInput(e.target.value)}
+            className="flex-1 p-2 rounded border"
+            placeholder="name@example.com"
+          />
+          <button
+            onClick={addEditAttendee}
+            className="px-3 py-2 bg-maroon text-white rounded"
+          >
+            Add
+          </button>
+        </div>
+
+        {editAttendees.length > 0 && (
+          <div className="mb-3 flex flex-wrap gap-2">
+            {editAttendees.map((a) => (
+              <div
+                key={a.email}
+                className="bg-gray-100 px-2 py-1 rounded flex items-center gap-2 text-xs"
+              >
+                <span>{a.email}</span>
+                <button
+                  onClick={() => removeEditAttendee(a.email)}
+                  className="text-red-600 font-bold"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex justify-between gap-2 mt-4">
+          <button
+            onClick={handleDeleteEdit}
+            className="px-3 py-2 bg-red-600 text-white rounded hover:brightness-90"
+          >
+            Delete
+          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setEditingSchedule(null)}
+              className="px-3 py-2 border rounded"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSaveEdit}
+              className="px-3 py-2 bg-maroon text-white rounded hover:brightness-90"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

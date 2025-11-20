@@ -131,12 +131,23 @@ router.post("/:groupId/message", (req, res) => {
   db.query(sql, params, (err) => {
     if (err) return res.status(500).json({ success: false, message: "Database error", err });
 
-    // Return updated messages
+    // --- THIS IS WHERE YOU INSERT SOCKET.IO EMIT ---
     db.query(
       "SELECT * FROM messages WHERE group_id = ? ORDER BY time ASC",
       [groupId],
       (err2, results) => {
         if (err2) return res.status(500).json({ success: false, message: "Database error", err2 });
+
+        // Add this:
+        const io = req.app.get("io"); // get the Socket.IO instance
+        io.to(`group_${groupId}`).emit("newNotification", {
+          type: "message",
+          groupId,
+          sender,
+          text,
+          time: new Date(),
+        });
+
         res.json({ success: true, messages: results });
       }
     );
