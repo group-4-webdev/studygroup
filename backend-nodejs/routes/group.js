@@ -10,34 +10,24 @@ router.post("/create", (req, res) => {
     description,
     created_by,
     size,
-    space_available,
     course,
     topic,
     location,
   } = req.body;
 
-  if (
-    !group_name ||
-    !description ||
-    !created_by ||
-    !size ||
-    !space_available ||
-    !course ||
-    !topic ||
-    !location
-  ) {
+  if (!group_name || !description || !created_by || !size || !course || !topic || !location) {
     return res.status(400).json({ success: false, message: "All fields are required" });
   }
 
-  const sqlInsertGroup = `
-    INSERT INTO groups 
-      (group_name, description, created_by, size, space_available, current_members, course, topic, location)
-    VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)
-  `;
+const sqlInsertGroup = `
+  INSERT INTO groups 
+    (group_name, description, created_by, size, current_members, course, topic, location, status)
+  VALUES (?, ?, ?, ?, 1, ?, ?, ?, 'pending')
+`;
 
   db.query(
     sqlInsertGroup,
-    [group_name, description, created_by, size, space_available, course, topic, location],
+    [group_name, description, created_by, size, course, topic, location],
     (err, result) => {
       if (err) {
         console.log(err);
@@ -45,8 +35,9 @@ router.post("/create", (req, res) => {
       }
 
       const groupId = result.insertId;
-      const sqlInsertMember = `INSERT INTO group_members (group_id, user_id) VALUES (?, ?)`;
 
+      // Add the creator to group_members
+      const sqlInsertMember = `INSERT INTO group_members (group_id, user_id) VALUES (?, ?)`;
       db.query(sqlInsertMember, [groupId, created_by], (err2) => {
         if (err2) {
           console.log(err2);
@@ -55,18 +46,18 @@ router.post("/create", (req, res) => {
 
         return res.json({
           success: true,
-          message: "Group created successfully",
+          message: "Group created successfully, waiting for admin approval",
           group: {
             id: groupId,
             group_name,
             description,
             created_by,
             size,
-            space_available,
             course,
             topic,
             location,
             current_members: 1,
+            status: "pending",
           },
         });
       });
@@ -85,19 +76,24 @@ router.get("/list", (req, res) => {
 
 // ----------------------------
 // Get groups for a specific user
-router.get("/user/:userId", (req, res) => {
+// GET user-specific group status
+router.get("/user-status/:userId", async (req, res) => {
   const { userId } = req.params;
+  
   const sql = `
-    SELECT g.*
+    SELECT g.id, g.group_name, g.status, g.remarks
     FROM groups g
-    LEFT JOIN group_members gm ON g.id = gm.group_id
-    WHERE g.created_by = ? OR gm.user_id = ?
-    GROUP BY g.id
-    ORDER BY g.created_at DESC
+    WHERE g.created_by = ?
   `;
-  db.query(sql, [userId, userId], (err, results) => {
-    if (err) return res.status(500).json({ success: false, message: "Database error", err });
-    res.json({ success: true, groups: results });
+  
+  db.query(sql, [userId], (err, results) => {
+    if (err) return res.status(500).json({ success: false, message: "Database error" });
+    const data = {};
+    results.forEach(g => {
+      data[g.id] = g.status;
+      data[g.id + "_remarks"] = g.remarks || "";
+    });
+    res.json({ success: true, data });
   });
 });
 
@@ -131,14 +127,12 @@ router.post("/:groupId/message", (req, res) => {
   db.query(sql, params, (err) => {
     if (err) return res.status(500).json({ success: false, message: "Database error", err });
 
-    // --- THIS IS WHERE YOU INSERT SOCKET.IO EMIT ---
     db.query(
       "SELECT * FROM messages WHERE group_id = ? ORDER BY time ASC",
       [groupId],
       (err2, results) => {
         if (err2) return res.status(500).json({ success: false, message: "Database error", err2 });
 
-        // Add this:
         const io = req.app.get("io"); // get the Socket.IO instance
         io.to(`group_${groupId}`).emit("newNotification", {
           type: "message",

@@ -1,78 +1,173 @@
+// controllers/authController.js
+import { OAuth2Client } from "google-auth-library";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { pool } from "../config/db.js";
-import { sendEmail } from "../utils/sendEmail.js"; 
+import { sendEmail } from "../utils/sendEmail.js";
 import { isAllowedWMSUEmail } from "../utils/validateWMSUEmail.js";
 
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
 const generateToken = (userId) =>
-  jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: "1h" });
+  jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: "7d" });
 
-export const createAccount = async (req, res) => {
+// GOOGLE SIGN-IN (FIXED & WORKING)
+export const googleAuth = async (req, res) => {
   try {
-    console.log("Incoming data:", req.body);
-    const { first_name, middle_name, last_name, username, email, password } = req.body;
+    const { idToken } = req.body;
+    if (!idToken) return res.status(400).json({ message: "Missing ID token" });
 
-    const [existingUser] = await pool.query("SELECT * FROM users WHERE email = ?", [email]);
-    if (existingUser.length > 0) {
-      return res.status(400).json({ message: "User already exists" });
+    const ticket = await client.verifyIdToken({
+      idToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    if (!payload) return res.status(401).json({ message: "Invalid token" });
+
+    const { email, sub: googleId, name: fullName = "User" } = payload;
+
+    if (!email.endsWith("@wmsu.edu.ph")) {
+      return res.status(400).json({ message: "Only WMSU emails are allowed" });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    if (!isAllowedWMSUEmail(email)) {
+      return res.status(400).json({ message: "Email not allowed (outside 5-year limit)" });
+    }
 
-    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    // Name parsing
+    const nameParts = fullName.trim().split(/\s+/);
+    let first_name = nameParts[0] || "";
+    let middle_name = "";
+    let last_name = nameParts[nameParts.length - 1] || "";
 
-    await pool.query(
-      "INSERT INTO users (first_name, middle_name, last_name, username, email, password, is_verified, verification_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-      [first_name, middle_name, last_name, username, email, hashedPassword, false, verificationCode]
-    );
+    if (nameParts.length === 4) {
+      first_name = `${nameParts[0]} ${nameParts[1]}`;
+      middle_name = nameParts[2];
+      last_name = nameParts[3];
+    } else if (nameParts.length === 3) {
+      first_name = nameParts[0];
+      middle_name = nameParts[1];
+      last_name = nameParts[2];
+    } else if (nameParts.length === 2) {
+      first_name = nameParts[0];
+      last_name = nameParts[1];
+    }
 
-    console.log("✅ User inserted. Sending verification email to:", email);
+    let username = first_name.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (!username) username = email.split("@")[0];
 
-    const verificationLink = `http://localhost:5173/verify?email=${encodeURIComponent(email)}`;
+    const [existing] = await pool.query("SELECT * FROM users WHERE email = ?", [email]);
+    let user;
 
-    await sendEmail(
-      email,
-      "Verify your Crimsons Study Squad Account",
-      `
-      <div style="font-family: Arial, sans-serif; line-height: 1.6;">
-        <h2 style="color: #800000;">Crimsons Study Squad</h2>
-        <p>Hi ${first_name},</p>
-        <p>Thank you for registering! To verify your account, copy the code below and paste it in the verification page:</p>
-        
-        <p style="font-style: italic; color: #555;">
-          Copy this code and paste it in the verification page. You can also click the link below to open the page with your email pre-filled in the same tab.
-        </p>
+    if (existing.length === 0) {
+      const [result] = await pool.query(
+        `INSERT INTO users 
+         (first_name, middle_name, last_name, username, email, google_id, is_verified)
+         VALUES (?, ?, ?, ?, ?, ?, 1)`,
+        [first_name, middle_name || null, last_name, username, email, googleId]
+      );
+      const [newUser] = await pool.query("SELECT * FROM users WHERE id = ?", [result.insertId]);
+      user = newUser[0];
+    } else {
+      user = existing[0];
+      await pool.query(
+        `UPDATE users SET 
+          first_name = COALESCE(first_name, ?),
+          middle_name = COALESCE(middle_name, ?),
+          last_name = COALESCE(last_name, ?),
+          username = ?,
+          google_id = COALESCE(google_id, ?),
+          is_verified = 1
+         WHERE id = ?`,
+        [first_name, middle_name || null, last_name, username, googleId, user.id]
+      );
+      const [updated] = await pool.query("SELECT * FROM users WHERE id = ?", [user.id]);
+      user = updated[0];
+    }
 
-        <h3 style="background: #f4f4f4; padding: 10px; display: inline-block;">${verificationCode}</h3>
-        <p>Alternatively, you can click the link below to open the verification page with your email pre-filled:</p>
-        <a href="${verificationLink}" style="color: #800000; text-decoration: underline; font-weight: bold;">
-          Open Verification Page
-        </a>
-        <p>If you didn’t request this, you can safely ignore this email.</p>
-        <br/>
-        <p>– Crimsons Study Squad Team</p>
-      </div>
-      `
-    );
+    const token = generateToken(user.id);
 
-    return res.status(201).json({
-      message: "Account created successfully! Please check your WMSU email for the verification code.",
+    return res.json({
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        first_name: user.first_name,
+        middle_name: user.middle_name || "",
+        last_name: user.last_name,
+        username: user.username,
+        email: user.email,
+      },
     });
-  } catch (error) {
-    console.error("Error during createAccount:", error);
-    return res.status(500).json({ message: "Server error", error: error.message });
+  } catch (err) {
+    console.error("Google Auth Error:", err.message);
+    return res.status(500).json({ message: "Google authentication failed" });
   }
 };
 
+// CREATE ACCOUNT (FIXED — NOW RETURNS SUCCESS PROPERLY)
+export const createAccount = async (req, res) => {
+  try {
+    const { first_name, middle_name, last_name, username, email, password } = req.body;
 
+    if (!email || !password || !first_name || !username) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
+
+    const [existing] = await pool.query("SELECT id FROM users WHERE email = ?", [email]);
+    if (existing.length > 0) {
+      return res.status(400).json({ message: "Email already registered" });
+    }
+
+    if (!isAllowedWMSUEmail(email)) {
+      return res.status(400).json({ message: "Invalid WMSU email (outside 5-year limit)" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    const [result] = await pool.query(
+      `INSERT INTO users 
+       (first_name, middle_name, last_name, username, email, password, verification_code, is_verified)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
+      [first_name, middle_name || null, last_name, username, email, hashedPassword, verificationCode]
+    );
+
+    // Send email
+    try {
+      await sendEmail(
+        email,
+        "Verify Your Crimsons Study Squad Account",
+        `<h2>Welcome ${first_name}!</h2>
+         <p>Your verification code is: <strong style="font-size:18px">${verificationCode}</strong></p>
+         <p>Or click here: <a href="http://localhost:5173/verify?email=${encodeURIComponent(email)}">Verify Email</a></p>`
+      );
+    } catch (emailErr) {
+      console.error("Email failed but account created:", emailErr);
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: "Account created! Check your WMSU email for verification code.",
+      userId: result.insertId
+    });
+
+  } catch (err) {
+    console.error("Create Account Error:", err);
+    return res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+// ---------------------- EMAIL/PASSWORD LOGIN ----------------------
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
-
     const [users] = await pool.query("SELECT * FROM users WHERE email = ?", [email]);
-    if (users.length === 0) return res.status(400).json({ message: "Invalid credentials" });
 
+    if (users.length === 0) return res.status(400).json({ message: "Invalid credentials" });
     const user = users[0];
+
     if (!user.password) return res.status(400).json({ message: "Use Google Sign-In" });
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -83,11 +178,12 @@ export const login = async (req, res) => {
     const token = generateToken(user.id);
     res.status(200).json({ token, user: { id: user.id, username: user.username, email: user.email } });
   } catch (err) {
-    console.error(err);
+    console.error("Login error:", err);
     res.status(500).json({ message: "Server error", error: err.message });
   }
 };
 
+// ---------------------- ACCOUNT VERIFICATION ----------------------
 export const verifyAccount = async (req, res) => {
   try {
     const { email, code } = req.body;
@@ -95,11 +191,8 @@ export const verifyAccount = async (req, res) => {
       "SELECT * FROM users WHERE email = ? AND verification_code = ?",
       [email, code]
     );
-    if (users.length === 0) return res.status(400).json({ message: "Invalid verification code" });
 
-    if (!isAllowedWMSUEmail(email)) {
-      return res.status(400).json({ message: "WMSU email not allowed (outside 5-year limit)" });
-    }
+    if (users.length === 0) return res.status(400).json({ message: "Invalid verification code" });
 
     await pool.query(
       "UPDATE users SET is_verified = true, verification_code = NULL WHERE id = ?",
@@ -108,22 +201,22 @@ export const verifyAccount = async (req, res) => {
 
     res.status(200).json({ message: "Account verified successfully" });
   } catch (err) {
-    console.error(err);
+    console.error("Verify account error:", err);
     res.status(500).json({ message: "Server error", error: err.message });
   }
 };
 
+// ---------------------- CHECK IF GOOGLE-ONLY ACCOUNT ----------------------
 export const checkGoogleAccount = async (req, res) => {
-  const { email } = req.query;
   try {
+    const { email } = req.query;
     const [users] = await pool.query("SELECT * FROM users WHERE email = ?", [email]);
     if (users.length === 0) return res.json({ isGoogleOnly: false });
 
     const user = users[0];
     res.json({ isGoogleOnly: !user.password && user.google_id ? true : false });
   } catch (err) {
-    console.error(err);
+    console.error("Check Google account error:", err);
     res.status(500).json({ isGoogleOnly: false });
   }
 };
-

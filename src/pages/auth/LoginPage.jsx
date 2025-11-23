@@ -51,14 +51,14 @@ const handleLogin = async () => {
 
     if (!res.ok) throw new Error(data.message || "Login failed");
 
-    const userData = {
-      id: data.user.id, 
-      username: data.user.username,
-      email: data.user.email,
-      first_name: data.user.first_name,
-      last_name: data.user.last_name,
-    };
-    localStorage.setItem("user", JSON.stringify(userData));
+const userData = {
+  id: data.user.id || data.user._id, // always capture correct id
+  username: data.user.username,
+  email: data.user.email,
+  first_name: data.user.first_name,
+  last_name: data.user.last_name,
+};
+localStorage.setItem("user", JSON.stringify(userData));
 
     loginUser(userData, data.token);
 
@@ -83,10 +83,16 @@ const handleLogin = async () => {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Google Login failed");
 
-      loginUser(
-        { username: data.user.username, email: data.user.email, id: data.user._id },
-        data.token
-      );
+loginUser(
+  {
+    id: data.user.id || data.user._id, // ensure id is stored
+    username: data.user.username,
+    email: data.user.email,
+    first_name: data.user.first_name,
+    last_name: data.user.last_name,
+  },
+  data.token
+);
 
       navigate("/user-dashboard");
     } catch (err) {

@@ -1,77 +1,119 @@
-import jwt from "jsonwebtoken";
 import { OAuth2Client } from "google-auth-library";
-import { pool } from "../config/db.js";
-import { sendEmail } from "../utils/sendEmail.js";
-import { isAllowedWMSUEmail } from "../utils/validateWMSUEmail.js"; // ✅ import validation
+import jwt from "jsonwebtoken";
+import { pool } from "../config/db.js";   // ✅ FIXED IMPORT
+import { isAllowedWMSUEmail } from "../utils/validateWMSUEmail.js";
 
+// Google Client
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 export const googleAuth = async (req, res) => {
   try {
     const { idToken } = req.body;
+
     const ticket = await client.verifyIdToken({
       idToken,
       audience: process.env.GOOGLE_CLIENT_ID,
     });
-    const payload = ticket.getPayload();
 
+    const payload = ticket.getPayload();
     const email = payload.email;
     const googleId = payload.sub;
+    const fullName = payload.name || "User";
 
+    // Email validation
     if (!email.endsWith("@wmsu.edu.ph")) {
       return res.status(400).json({ message: "Only WMSU emails are allowed." });
     }
 
     if (!isAllowedWMSUEmail(email)) {
-      return res.status(400).json({ message: "WMSU email not allowed (outside 5-year limit or invalid format)." });
+      return res.status(400).json({ message: "WMSU email not allowed." });
     }
 
-    let username = payload.name || email.split("@")[0];
-    const nameParts = username.trim().split(" ");
-    username = nameParts[1] || nameParts[0];
-    username = username.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+    // Proper name splitting
+    const nameParts = fullName.trim().split(" ");
+    let first_name = nameParts[0] || "";
+    let middle_name = "";
+    let last_name = nameParts[nameParts.length - 1] || "";
 
-    if (username.length > 0) {
-      username = username.charAt(0).toUpperCase() + username.slice(1).toLowerCase();
+    if (nameParts.length === 4) {
+      first_name = `${nameParts[0]} ${nameParts[1]}`;
+      middle_name = nameParts[2];
+      last_name = nameParts[3];
+    } else if (nameParts.length === 3) {
+      first_name = nameParts[0];
+      middle_name = nameParts[1];
+      last_name = nameParts[2];
+    } else if (nameParts.length === 2) {
+      first_name = nameParts[0];
+      last_name = nameParts[1];
     }
 
-    const [users] = await pool.query("SELECT * FROM users WHERE email = ?", [email]);
+    // Username cleanup
+    let username = first_name.split(" ")[0].toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (!username) username = email.split("@")[0];
+
+    // Check existing user
+    const [existingUsers] = await pool.query(
+      "SELECT * FROM users WHERE email = ?",
+      [email]
+    );
+
     let user;
 
-    if (users.length === 0) {
-      const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-
+    if (existingUsers.length === 0) {
       const [result] = await pool.query(
-        "INSERT INTO users (username, email, google_id, is_verified, verification_code) VALUES (?, ?, ?, false, ?)",
-        [username, email, googleId, verificationCode]
+        `INSERT INTO users 
+        (first_name, middle_name, last_name, username, email, google_id, is_verified) 
+        VALUES (?, ?, ?, ?, ?, ?, true)`,
+        [first_name, middle_name || null, last_name, username, email, googleId]
       );
 
-      user = { id: result.insertId, username, email };
-
-      const resetURL = `http://localhost:5173/verify?email=${encodeURIComponent(email)}`;
-      const message = `
-        <h3>Verify your WMSU email</h3>
-        <p>Hi ${username}! Your verification code is:</p>
-        <h2>${verificationCode}</h2>
-        <p>Click the link below to go to the verification page and enter your code:</p>
-        <a href="${resetURL}" target="_blank">Verify Account</a>
-        <p>This code expires in 10 minutes.</p>
-      `;
-      await sendEmail(email, "Verify Your Study Squad Account", message);
-      console.log(`✅ Verification email sent to: ${email}`);
+      user = {
+        id: result.insertId,
+        first_name,
+        middle_name: middle_name || null,
+        last_name,
+        username,
+        email,
+      };
     } else {
+      user = existingUsers[0];
 
-      user = users[0];
-      if (!user.google_id) {
-        await pool.query("UPDATE users SET google_id = ? WHERE id = ?", [googleId, user.id]);
-      }
-      user.username = user.username.split(" ")[0];
+      await pool.query(
+        `UPDATE users 
+        SET first_name = COALESCE(first_name, ?),
+            middle_name = COALESCE(middle_name, ?),
+            last_name = COALESCE(last_name, ?),
+            username = ?,
+            google_id = COALESCE(google_id, ?)
+        WHERE id = ?`,
+        [first_name, middle_name || null, last_name, username, googleId, user.id]
+      );
+
+      const [updated] = await pool.query(
+        "SELECT * FROM users WHERE id = ?",
+        [user.id]
+      );
+      user = updated[0];
     }
 
-    const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: "1h" });
-    res.json({ token, user: { id: user.id, username: user.username, email: user.email } });
+    // JWT Token
+    const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: "7d" });
+
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        first_name: user.first_name,
+        middle_name: user.middle_name,
+        last_name: user.last_name,
+        username: user.username,
+        email: user.email,
+      },
+    });
+
   } catch (err) {
     console.error("Google auth error:", err);
-    res.status(400).json({ message: "Google authentication failed" });
+    res.status(500).json({ message: "Authentication failed" });
   }
 };

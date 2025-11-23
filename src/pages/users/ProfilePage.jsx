@@ -17,16 +17,26 @@ export default function ProfilePage() {
   const [originalUser, setOriginalUser] = useState(null); // For cancel
   const fileInputRef = useRef();
 
-  // Fetch user info on mount
-  useEffect(() => {
-    axios.get("http://localhost:3000/api/users/me")
-      .then(res => {
-        setUser(res.data);
-        setOriginalUser(res.data);
-        setPhotoPreview(res.data.profile_photo || null);
-      })
-      .catch(err => console.error("Error fetching user:", err));
-  }, []);
+useEffect(() => {
+  const fetchUser = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await axios.get("http://localhost:5000/api/users/me", {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      setUser(res.data);
+      setOriginalUser(res.data);
+      setPhotoPreview(res.data.profile_photo || null);
+    } catch (err) {
+      console.error("Error fetching user:", err);
+      alert("Failed to fetch user data. Please try again.");
+    }
+  };
+
+  fetchUser();
+}, []);
 
   // Input change handler
   const handleChange = (e) => {
@@ -44,30 +54,34 @@ export default function ProfilePage() {
   };
 
   // Save profile changes
-  const handleSave = async () => {
-    try {
-      const formData = new FormData();
-      formData.append("first_name", user.first_name);
-      formData.append("middle_name", user.middle_name);
-      formData.append("last_name", user.last_name);
-      formData.append("username", user.username);
-      formData.append("bio", user.bio);
-      if (user.newPhotoFile) formData.append("profile_photo", user.newPhotoFile);
+const handleSave = async () => {
+  try {
+    const formData = new FormData();
+    formData.append("first_name", user.first_name);
+    formData.append("middle_name", user.middle_name);
+    formData.append("last_name", user.last_name);
+    formData.append("username", user.username);
+    formData.append("bio", user.bio);
+    if (user.newPhotoFile) formData.append("profile_photo", user.newPhotoFile);
 
-      const res = await axios.put("http://localhost:3000/api/users/me", formData, {
-        headers: { "Content-Type": "multipart/form-data" }
-      });
+    const token = localStorage.getItem("token");
+    const res = await axios.put("http://localhost:5000/api/users/me", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+        Authorization: `Bearer ${token}`
+      }
+    });
 
-      alert("Profile updated successfully!");
-      setUser(res.data);
-      setOriginalUser(res.data);
-      setPhotoPreview(res.data.profile_photo || null);
-      delete user.newPhotoFile;
-    } catch (err) {
-      console.error("Error updating profile:", err);
-      alert("Failed to update profile. Please try again.");
-    }
-  };
+    alert("Profile updated successfully!");
+    setUser(res.data);
+    setOriginalUser(res.data);
+    setPhotoPreview(res.data.profile_photo || null);
+    delete user.newPhotoFile;
+  } catch (err) {
+    console.error("Error updating profile:", err);
+    alert("Failed to update profile. Please try again.");
+  }
+};
 
   // Cancel changes
   const handleCancel = () => {

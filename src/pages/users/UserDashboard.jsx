@@ -1,86 +1,186 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import { io } from "socket.io-client";
 
-export default function UserDashboard({ currentUserId }) {
+const socket = io("http://localhost:5000", { transports: ["websocket", "polling"] });
+
+export default function UserDashboard() {
   const navigate = useNavigate();
+
+  // TEMP: hardcoded current user ID
+  const currentUserId = 25;
+
   const [userGroups, setUserGroups] = useState([]);
   const [allGroups, setAllGroups] = useState([]);
-  const [refreshSignal, setRefreshSignal] = useState(false);
+  const [joinedGroups, setJoinedGroups] = useState([]); // approved groups
+  const [pendingRequests, setPendingRequests] = useState([]); // pending approval
 
-  const fetchAllGroups = async () => {
-    try {
-      const res = await axios.get("http://localhost:3000/api/group/list");
-      if (res.data.success) setAllGroups(res.data.data);
-    } catch (err) {
-      console.error(err);
-    }
-  };
+  // Fetch all groups
+const fetchGroups = async () => {
+  try {
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    const userId = user.id; // ← REMOVE HARDCODE 25
 
-  const fetchUserGroups = async () => {
-    try {
-      const res = await axios.get("http://localhost:3000/api/group/list");
-      if (res.data.success)
-        setUserGroups(res.data.data.filter(g => g.created_by === currentUserId));
-    } catch (err) {
-      console.error(err);
+    if (!userId) {
+      console.log("No user logged in");
+      return;
     }
-  };
+
+    const [allRes, myRes] = await Promise.all([
+      axios.get("http://localhost:5000/api/group/list"), // only approved
+      axios.get(`http://localhost:5000/api/group/my-groups/${userId}`)
+    ]);
+
+    const approvedGroups = allRes.data.data || [];
+    const myCreatedGroups = myRes.data.data || [];
+
+    setAllGroups(approvedGroups);
+    setUserGroups(myCreatedGroups); // ← This shows "Your Created Groups"
+
+    // For joined groups (from group_members table)
+    const joinedRes = await axios.get(`http://localhost:5000/api/group/my-joined/${userId}`);
+    setJoinedGroups(joinedRes.data.data?.map(g => g.id) || []);
+
+  } catch (err) {
+    console.error("Error fetching dashboard:", err);
+  }
+};
 
   useEffect(() => {
-    fetchAllGroups();
-    fetchUserGroups();
-  }, [refreshSignal]);
+    fetchGroups();
+  }, []);
 
-  const handleJoinGroup = async (groupId) => {
-    try {
-      const res = await axios.post("http://localhost:3000/api/group/join", {
-        groupId,
-        userId: currentUserId,
-      });
-      if (res.data.success) setRefreshSignal(prev => !prev);
-      else alert(res.data.message);
-    } catch (err) {
-      console.error(err);
-      alert(err.response?.data?.message || "Failed to join group");
+  // Listen for approval notifications via socket
+  useEffect(() => {
+    socket.on("request_approved", data => {
+      if (data.userId === currentUserId) {
+        alert(`Your request to join "${data.groupName}" was approved!`);
+        setJoinedGroups(prev => [...prev, data.groupId]);
+        setPendingRequests(prev => prev.filter(id => id !== data.groupId));
+      }
+    });
+
+    return () => socket.off("request_approved");
+  }, []);
+
+  // Join group
+const handleJoinGroup = async (groupId) => {
+  try {
+    const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+    const userId = currentUser?.id;
+
+    if (!userId) return alert("You must be logged in to join a group.");
+
+    // Include groupId in the POST body
+    const res = await axios.post(`http://localhost:5000/api/group/join`, {
+      groupId,
+      userId
+    });
+
+if (res.data.success) {
+  alert("Join request sent! Waiting for creator approval.");
+  setPendingRequests(prev => [...prev, groupId]); // ← ADD THIS LINE
+} else {
+      alert(res.data.message); // e.g., "You are already in this group"
     }
-  };
+  } catch (err) {
+    console.error("Failed to join group:", err);
+    alert("Failed to send join request. Please try again.");
+  }
+};
 
+
+  // Render
   return (
-    <div className="flex h-[calc(100vh-200px)] max-w-7xl mx-auto bg-white shadow-xl rounded-xl border border-gray-300 overflow-hidden">
+    <div className="flex h-[calc(100vh-200px)] max-w-7xl mx-auto bg-gradient-to-br from-gray-50 to-gray-100 shadow-2xl rounded-2xl border border-gray-200 overflow-hidden">
       <div className="flex flex-1 flex-col lg:flex-row gap-0">
-        <main className="flex-1 p-6 overflow-y-auto scrollbar-hide">
-          <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl font-bold text-maroon">Groups Available</h1>
+
+        {/* Main Content - Available Groups */}
+        <main className="flex-1 p-8 overflow-y-auto scrollbar-hide">
+          <div className="flex justify-between items-center mb-8">
+            <h1 className="text-3xl font-extrabold text-[#800000] tracking-tight">
+              Available Study Groups
+            </h1>
             <button
               onClick={() => navigate("/create-group")}
-              className="bg-maroon text-white px-4 py-2 rounded-lg hover:brightness-110"
+              className="bg-[#800000] text-white px-6 py-3 rounded-xl font-semibold shadow-lg hover:shadow-xl hover:bg-[#6b0000] transition-all duration-200 flex items-center gap-2"
             >
-              + Create Group
+              <span className="text-xl">+</span> Create New Group
             </button>
           </div>
 
-          <div className="space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
             {allGroups.length === 0 ? (
-              <p className="text-gray-500">No groups available.</p>
+              <div className="col-span-full text-center py-16">
+                <p className="text-gray-500 text-lg">No active study groups available at the moment.</p>
+              </div>
             ) : (
               allGroups.map(g => {
                 const isFull = g.current_members >= g.size;
                 return (
-                  <div key={g.id} className="flex items-center justify-between bg-gray-100 p-4 rounded-lg border border-gray-300">
-                    <div>
-                      <p className="font-semibold text-maroon">{g.group_name} ({g.topic})</p>
-                      <p className="text-gray-700">{g.description}</p>
-                      <p className="text-gray-500">{g.course} • {g.location}</p>
-                      <p>Size: {g.size} • Space Available: {g.space_available - g.current_members}</p>
+                  <div
+                    key={g.id}
+                    className="group bg-white rounded-2xl shadow-md hover:shadow-2xl border border-gray-200 overflow-hidden transition-all duration-300 transform hover:-translate-y-2 flex flex-col justify-between"
+                  >
+                    <div className="p-5 space-y-3">
+                      <div>
+                        <h3 className="font-bold text-lg text-[#800000] group-hover:text-[#6b0000] transition-colors">
+                          {g.group_name}
+                        </h3>
+                        <p className="text-[#FFD700] font-medium text-sm mt-0.5">{g.topic}</p>
+                      </div>
+
+                      <p className="text-gray-700 text-sm leading-relaxed line-clamp-2">
+                        {g.description}
+                      </p>
+
+                      <div className="flex items-center gap-4 text-xs text-gray-600">
+                        <span className="flex items-center gap-1">
+                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"/></svg>
+                          {g.course}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"/></svg>
+                          {g.location}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-500">
+                          Size: <strong className="text-gray-800">{g.size}</strong>
+                        </span>
+                        <span className={`font-semibold ${isFull ? 'text-red-600' : 'text-green-600'}`}>
+                          {g.size - g.current_members} spot{g.size - g.current_members !== 1 ? 's' : ''} left
+                        </span>
+                      </div>
                     </div>
-                    <button
-                      disabled={isFull}
-                      onClick={() => handleJoinGroup(g.id)}
-                      className={`px-4 py-2 rounded hover:brightness-110 ${isFull ? "bg-gray-400 text-gray-700 cursor-not-allowed" : "bg-gold text-maroon"}`}
-                    >
-                      {isFull ? "Full" : "Join Group"}
-                    </button>
+
+                    <div className="px-5 pb-5">
+                      <button
+                        disabled={isFull}
+                        onClick={() => {
+                          if (joinedGroups.includes(g.id)) {
+                            navigate(`/group/${g.id}`);
+                          } else {
+                            handleJoinGroup(g.id);
+                          }
+                        }}
+                        className={`w-full py-3 rounded-xl font-semibold text-sm transition-all duration-200 ${
+                          isFull
+                            ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+                            : "bg-gradient-to-r from-[#FFD700] to-[#e6c200] text-[#800000] shadow-md hover:shadow-lg transform hover:scale-105"
+                        }`}
+                      >
+                        {isFull
+                          ? "Group Full"
+                          : joinedGroups.includes(g.id)
+                            ? "Enter Group"
+                            : pendingRequests.includes(g.id)
+                              ? "Pending Approval"
+                              : "Join This Group"}
+                      </button>
+                    </div>
                   </div>
                 );
               })
@@ -88,21 +188,102 @@ export default function UserDashboard({ currentUserId }) {
           </div>
         </main>
 
-        {/* Sidebar */}
-        <aside className="w-full lg:w-80 p-6 bg-gray-50 overflow-y-auto">
-          <h3 className="font-semibold text-maroon text-lg mb-3">Your Created Groups</h3>
-          <ul>
-            {userGroups.length === 0 ? (
-              <li className="text-gray-500">You haven't created any groups yet.</li>
-            ) : (
-              userGroups.map(g => (
-                <li key={g.id} className="flex justify-between items-center">
-                  <span>{g.group_name} ({g.current_members})</span>
-                </li>
-              ))
+{/* Sidebar - Your Created Groups */}
+<aside className="w-full lg:w-96 p-8 bg-gradient-to-b from-[#800000]/5 to-[#800000]/10 border-l border-gray-200 overflow-y-auto scrollbar-hide">
+  <h3 className="text-2xl font-bold text-[#800000] mb-6 tracking-tight">
+    Your Created Groups
+  </h3>
+
+  <div className="space-y-6">
+    {userGroups.length === 0 ? (
+      <div className="text-center py-12 bg-white/70 rounded-2xl border border-dashed border-gray-300">
+        <p className="text-gray-500 text-lg">You haven’t created any groups yet.</p>
+        <p className="text-sm text-gray-400 mt-2">Click the button above to get started!</p>
+      </div>
+    ) : (
+      userGroups.map(g => (
+        <div
+          key={g.id}
+          className={`bg-white rounded-2xl shadow-lg border-2 overflow-hidden hover:shadow-xl transition-all duration-300 flex flex-col justify-between ${
+            g.status === "declined" ? "border-red-400 opacity-90" : "border-gray-200"
+          }`}
+        >
+          <div className="p-5 space-y-3 bg-gradient-to-br from-[#800000]/5 to-transparent">
+            <div className="flex justify-between items-start">
+              <div>
+                <h4 className="font-bold text-lg text-[#800000]">{g.group_name}</h4>
+                <p className="text-[#FFD700] font-medium text-sm mt-0.5">{g.topic}</p>
+              </div>
+              {g.status === "declined" && (
+                <span className="bg-red-100 text-red-800 px-3 py-1 rounded-full text-xs font-bold">
+                  Declined
+                </span>
+              )}
+              {g.status === "pending" && (
+                <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-xs font-bold">
+                  Pending
+                </span>
+              )}
+              {g.status === "approved" && (
+                <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-xs font-bold">
+                  Active
+                </span>
+              )}
+            </div>
+
+            <p className="text-gray-700 text-sm leading-relaxed">{g.description}</p>
+
+            <div className="flex flex-wrap gap-3 text-xs text-gray-600">
+              <span className="flex items-center gap-1">
+                Course
+                {g.course}
+              </span>
+              <span className="flex items-center gap-1">
+                Location
+                {g.location}
+              </span>
+            </div>
+
+            <div className="flex justify-between items-center text-sm font-medium">
+              <span className="text-gray-600">
+                Members: <strong className="text-[#800000]">{g.current_members}/{g.size}</strong>
+              </span>
+              {g.status === "approved" && (
+                <span className="text-green-600 text-xs font-bold">Active</span>
+              )}
+              {g.status === "pending" && (
+                <span className="text-yellow-600 text-xs font-bold">Waiting for approval</span>
+              )}
+              {g.status === "declined" && (
+                <span className="text-red-600 text-xs font-bold">Declined by Admin</span>
+              )}
+            </div>
+
+            {g.status === "declined" && g.remarks && (
+              <div className="mt-2 p-3 bg-red-50 rounded-lg text-sm text-red-700 border border-red-200">
+                <strong>Reason:</strong> {g.remarks}
+              </div>
             )}
-          </ul>
-        </aside>
+          </div>
+
+          <div className="px-5 pb-5">
+            <button
+              onClick={() => navigate(`/group/${g.id}`)}
+              className={`w-full py-3 rounded-xl font-semibold text-sm transition-all duration-200 ${
+                g.status === "declined"
+                  ? "bg-gray-400 text-white cursor-not-allowed"
+                  : "bg-[#800000] text-white hover:bg-[#6b0000] shadow-md hover:shadow-lg transform hover:scale-105"
+              }`}
+              disabled={g.status === "declined"}
+            >
+              {g.status === "declined" ? "Declined – Cannot Enter" : "View Group Details"}
+            </button>
+          </div>
+        </div>
+      ))
+    )}
+  </div>
+</aside>
       </div>
     </div>
   );

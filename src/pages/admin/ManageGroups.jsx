@@ -1,6 +1,7 @@
 // src/pages/admin/ManageGroups.jsx
 import { useEffect, useState } from "react";
 import axios from "axios";
+import { io } from "socket.io-client";
 import { CheckCircleIcon, XCircleIcon, UsersIcon, ClockIcon, ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/24/solid";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -16,26 +17,54 @@ export default function ManageGroups() {
     declined: false,
   });
 
-  const fetchGroups = async () => {
-    setLoading(true);
-    try {
-      const res = await axios.get("http://localhost:5000/api/admin/admin-list");
-      const groupList = Array.isArray(res.data)
-        ? res.data
-        : res.data?.data || res.data?.groups || [];
-      setGroups(groupList);
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to fetch groups");
-      setGroups([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+const fetchGroups = async () => {
+  setLoading(true);
+  try {
+    const res = await axios.get("http://localhost:5000/api/group/all"); // ← Show ALL
+    const groupList = Array.isArray(res.data)
+      ? res.data
+      : res.data?.data || [];
+    
+    // Ensure pending groups are correctly marked
+    const mappedGroups = groupList.map(g => ({
+      ...g,
+      status: g.status || "pending"
+    }));
 
-  useEffect(() => {
+    setGroups(mappedGroups);
+  } catch (err) {
+    console.error(err);
+    toast.error("Failed to fetch groups");
+    setGroups([]);
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+useEffect(() => {
+  fetchGroups(); // initial load
+
+  const socket = io("http://localhost:5000");
+
+  // NEW GROUPS APPEAR INSTANTLY IN PENDING
+  socket.on("newPendingGroup", (newGroup) => {
+    setGroups(prev => {
+      // Prevent duplicates
+      if (prev.some(g => g.id === newGroup.id)) return prev;
+      // Add to the top of pending
+      toast.success(`New group created: ${newGroup.group_name}`);
+      return [newGroup, ...prev];
+    });
+  });
+
+  // When any admin approves/declines — refresh everyone
+  socket.on("groupStatusChanged", () => {
     fetchGroups();
-  }, []);
+  });
+
+  return () => socket.disconnect();
+}, []);
 
 const handleApprove = async (groupId) => {
   if (!confirm("Approve this group?")) return;

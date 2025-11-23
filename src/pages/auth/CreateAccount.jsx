@@ -22,45 +22,60 @@ export default function CreateAccount() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleCreate = async (e) => {
-    e.preventDefault();
+const handleCreate = async (e) => {
+  e.preventDefault();
 
-    const { first_name, middle_name, last_name, username, email, password, confirm_password } = formData;
-    if (!first_name || !middle_name || !last_name || !username || !email || !password || !confirm_password) {
-      alert("Please fill out all fields!");
-      return;
+  const { first_name, middle_name, last_name, username, email, password, confirm_password } = formData;
+
+  if (!first_name || !last_name || !username || !email || !password || !confirm_password) {
+    alert("Please fill out all required fields!");
+    return;
+  }
+
+  if (!email.endsWith("@wmsu.edu.ph")) {
+    alert("Only WMSU student email (@wmsu.edu.ph) is allowed.");
+    return;
+  }
+
+  if (password !== confirm_password) {
+    alert("Passwords do not match!");
+    return;
+  }
+
+  setLoading(true);
+
+  try {
+    const res = await fetch("http://localhost:5000/api/auth", {  // Make sure route is correct!
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        first_name,
+        middle_name: middle_name || null,
+        last_name,
+        username,
+        email,
+        password
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.message || "Failed to create account");
     }
 
-    if (!email.endsWith("@wmsu.edu.ph")) {
-      alert("Only WMSU student email (@wmsu.edu.ph) is allowed.");
-      return;
-    }
+    // Success! Show message and redirect
+    alert("Account created successfully! Check your WMSU email for the verification code.");
 
-    if (password !== confirm_password) {
-      alert("Passwords do not match!");
-      return;
-    }
+    // Even if no full user object, we can still redirect
+    navigate(`/verify?email=${encodeURIComponent(email)}`);
 
-    setLoading(true);
-
-    try {
-      const res = await fetch("http://localhost:5000/api/auth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ first_name, middle_name, last_name, username, email, password }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed to register");
-
-      alert("✅ Account created successfully! Check your WMSU email for the verification code.");
-      navigate("/verify?email=" + encodeURIComponent(email));
-    } catch (err) {
-      alert(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  } catch (err) {
+    alert(err.message || "Something went wrong");
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleGoogleSignUp = async (credentialResponse) => {
     setLoading(true);
@@ -98,7 +113,7 @@ export default function CreateAccount() {
           <h1 className="text-3xl font-bold text-white">Crimsons Study Squad</h1>
         </div>
 
-        <div className="w-1/2 flex flex-col justify-center items-center p-10 overflow-y-auto max-h-[700px]">
+        <div className="w-1/2 flex flex-col justify-center items-center p-10 overflow-y-auto scrollbar-hide max-h-[700px]">
           <h2 className="text-2xl font-semibold mb-6 text-maroon text-center leading-snug mt-30">
             Make your own account now!
           </h2>
