@@ -38,10 +38,30 @@ const server = http.createServer(app);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Dynamic CORS configuration
+const getAllowedOrigins = () => {
+  const env = process.env.NODE_ENV || 'development';
+  const allowedOrigins = [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'http://127.0.0.1:5173',
+  ];
+
+  // Add production URLs
+  if (env === 'production') {
+    const frontendUrl = process.env.FRONTEND_URL;
+    if (frontendUrl) allowedOrigins.push(frontendUrl);
+  }
+
+  return allowedOrigins;
+};
+
 app.use(express.json());
 app.use(cors({
-  origin: "http://localhost:5173",
-  credentials: true
+  origin: getAllowedOrigins(),
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // Serve uploaded files statically
@@ -90,9 +110,13 @@ app.use("/api/announcements", announcementRoutes);
 // === Socket.io Setup ===
 const io = new IOServer(server, {
   cors: {
-    origin: "http://localhost:5173",
-    methods: ["GET", "POST"]
-  }
+    origin: getAllowedOrigins(),
+    methods: ["GET", "POST"],
+    credentials: true
+  },
+  transports: ['websocket', 'polling'],
+  pingInterval: 25000,
+  pingTimeout: 60000
 });
 
 app.set("io", io);

@@ -1,0 +1,45 @@
+services:
+  - type: web
+    name: study-group-backend
+    env: node
+    plan: free
+    buildCommand: cd study-group-backend && npm install
+    startCommand: cd study-group-backend && npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DB_HOST
+        fromDatabase:
+          name: study-group-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: study-group-db
+          property: port
+      - key: DB_USER
+        fromDatabase:
+          name: study-group-db
+          property: username
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: study-group-db
+          property: password
+      - key: DB_NAME
+        fromDatabase:
+          name: study-group-db
+          property: database
+
+  - type: web
+    name: study-group-frontend
+    env: static
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://study-group-backend.onrender.com/api
+
+databases:
+  - name: study-group-db
+    engine: mysql
+    plan: free
+    ipAllowList: []
