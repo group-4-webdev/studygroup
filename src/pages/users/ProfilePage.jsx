@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { UserCircleIcon, CameraIcon, CheckCircleIcon } from "@heroicons/react/24/solid";
-import axios from "axios";
+import api from "../../api";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -24,7 +24,7 @@ useEffect(() => {
   const fetchUser = async () => {
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.get("http://localhost:5000/api/users/me", {
+      const res = await api.get(`/users/me`, {
         headers: {
           Authorization: `Bearer ${token}`
         }
@@ -68,7 +68,7 @@ const handleSave = async () => {
     if (user.newPhotoFile) formData.append("profile_photo", user.newPhotoFile);
 
     const token = localStorage.getItem("token");
-    const res = await axios.put("http://localhost:5000/api/users/me", formData, {
+    const res = await api.put(`/users/me`, formData, {
       headers: {
         "Content-Type": "multipart/form-data",
         Authorization: `Bearer ${token}`
@@ -142,10 +142,10 @@ const handleSave = async () => {
                       {photoPreview ? (
                         <img
                           src={
-                            photoPreview.startsWith("/uploads")
-                              ? `http://localhost:3000${photoPreview}`
-                              : photoPreview
-                          }
+                              photoPreview && photoPreview.startsWith("/uploads")
+                                ? `${(import.meta.env.VITE_API_URL || 'http://localhost:5000').replace(/\/api\/?$/,'')}${photoPreview}`
+                                : photoPreview
+                            }
                           alt="Profile"
                           className="w-28 h-28 rounded-full border-4 border-maroon shadow-lg object-cover"
                         />

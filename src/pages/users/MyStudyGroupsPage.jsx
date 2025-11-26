@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
+import api from "../../api";
 import { useNavigate } from "react-router-dom";
 import { UserGroupIcon } from "@heroicons/react/24/outline";
 
@@ -12,14 +12,14 @@ export default function MyStudyGroupsPage() {
     const fetchGroups = async () => {
       try {
         // Fetch groups the user joined
-        const joinedRes = await axios.get(
-          `http://localhost:5000/api/group/my-joined/${user.id}`
+        const joinedRes = await api.get(
+          `/group/my-joined/${user.id}`
         );
         const joinedGroups = joinedRes.data.data || [];
 
         // Fetch groups the user created
-        const createdRes = await axios.get(
-          `http://localhost:5000/api/group/my-groups/${user.id}`
+        const createdRes = await api.get(
+          `/group/my-groups/${user.id}`
         );
         const createdGroups = createdRes.data.data || [];
 

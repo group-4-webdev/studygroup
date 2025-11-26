@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import api from "../../api";
 import { io } from "socket.io-client";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
-const socket = io("http://localhost:5000", { transports: ["websocket", "polling"] });
+const SOCKET_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:5000').replace(/\/api\/?$/,'');
+const socket = io(SOCKET_BASE, { transports: ["websocket", "polling"] });
 
 export default function UserDashboard() {
   const navigate = useNavigate();
@@ -29,8 +30,8 @@ const fetchGroups = async () => {
     }
 
     const [allRes, myRes] = await Promise.all([
-      axios.get("http://localhost:5000/api/group/list"),
-      axios.get(`http://localhost:5000/api/group/my-groups/${userId}`)
+      api.get("/group/list"),
+      api.get(`/group/my-groups/${userId}`)
     ]);
 
     const approvedGroups = allRes.data.data || [];
@@ -44,7 +45,7 @@ const fetchGroups = async () => {
     setUserGroups(myCreatedGroups);    // CREATED groups
 
     // Joined groups
-    const joinedRes = await axios.get(`http://localhost:5000/api/group/my-joined/${userId}`);
+    const joinedRes = await api.get(`/group/my-joined/${userId}`);
     setJoinedGroups(joinedRes.data.data?.map(g => g.id) || []);
 
   } catch (err) {
@@ -78,7 +79,7 @@ const handleJoinGroup = async (groupId) => {
     if (!userId) return alert("You must be logged in to join a group.");
 
     // Include groupId in the POST body
-    const res = await axios.post(`http://localhost:5000/api/group/join`, {
+    const res = await api.post(`/group/join`, {
       groupId,
       userId
     });

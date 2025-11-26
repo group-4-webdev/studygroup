@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import axios from "axios";
+import api from "../../api";
 import io from "socket.io-client";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -56,7 +56,7 @@ export default function JoinViewPage() {
 
     const loadGroup = async () => {
       try {
-        const allGroupsRes = await axios.get("http://localhost:5000/api/group/all");
+        const allGroupsRes = await api.get(`/group/all`);
         const foundGroup = allGroupsRes.data.data.find(g => g.id === parseInt(groupId));
 
         if (!foundGroup) {
@@ -69,15 +69,15 @@ export default function JoinViewPage() {
         // Check if approved
         let status = "none";
         try {
-          const joinedRes = await axios.get(`http://localhost:5000/api/group/my-joined/${userId}`);
+          const joinedRes = await api.get(`/group/my-joined/${userId}`);
           const joinedIds = joinedRes.data.data?.map(g => g.id) || [];
           if (joinedIds.includes(parseInt(groupId))) status = "approved";
         } catch {}
 
         if (status !== "approved") {
           try {
-            const pendingRes = await axios.get(
-              "http://localhost:5000/api/group/pending-members-for-user",
+            const pendingRes = await api.get(
+              `/group/pending-members-for-user`,
               { params: { userId } }
             );
             const pendingIds = pendingRes.data.data || [];
@@ -91,7 +91,7 @@ export default function JoinViewPage() {
         if (status === "approved" || foundGroup.created_by === userId) {
           // --- Messages ---
           try {
-            const msgRes = await axios.get(`http://localhost:5000/api/messages/${groupId}/messages`);
+            const msgRes = await api.get(`/messages/${groupId}/messages`);
             const mappedMsgs = msgRes.data.messages.map(m => ({
               ...m,
               senderName: m.sender_name || (m.sender_id === userId ? userName : "Unknown"),
@@ -101,7 +101,7 @@ export default function JoinViewPage() {
 
           // --- Events ---
           try {
-            const schedRes = await axios.get(`http://localhost:5000/api/calendar/group/${groupId}`);
+            const schedRes = await api.get(`/calendar/group/${groupId}`);
             const schedules = schedRes.data.schedules || [];
             setEvents(schedules.map(s => ({
               ...s,
@@ -115,7 +115,7 @@ export default function JoinViewPage() {
 
           // --- Announcements ---
           try {
-            const annRes = await axios.get(`http://localhost:5000/api/announcements/group/${groupId}`);
+            const annRes = await api.get(`/announcements/group/${groupId}`);
             setAnnouncements(annRes.data.announcements || []);
           } catch (err) {
             console.error("Failed to load announcements:", err);
@@ -132,7 +132,8 @@ export default function JoinViewPage() {
     loadGroup();
 
     // --- Initialize socket ---
-    const socket = io("http://localhost:5000", { 
+    const SOCKET_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:5000').replace(/\/api\/?$/,'');
+    const socket = io(SOCKET_BASE, { 
       transports: ["websocket", "polling"],
       withCredentials: true 
     });
@@ -206,7 +207,7 @@ const handleFileUpload = async (e) => {
   formData.append("file", file);
 
   try {
-    const res = await axios.post("http://localhost:5000/api/upload", formData);
+    const res = await api.post(`/upload`, formData);
     const msg = {
       groupId: parseInt(groupId),
       sender: userId,
@@ -226,7 +227,7 @@ const handleFileUpload = async (e) => {
   // --- Join group ---
   const handleJoinGroup = async () => {
     try {
-      await axios.post(`http://localhost:5000/api/group/join`, { groupId: parseInt(groupId), userId });
+      await api.post(`/group/join`, { groupId: parseInt(groupId), userId });
       setUserStatus("pending");
       toast.success("Join request sent! Waiting for creator approval.");
     } catch (err) {
@@ -264,8 +265,8 @@ const handleFileUpload = async (e) => {
         meetingLink: meetingType === "online" ? meetingLink : null
       };
 
-      const res = await axios.post(
-        `http://localhost:5000/api/calendar/group/${groupId}`,
+      const res = await api.post(
+        `/calendar/group/${groupId}`,
         payload
       );
 
@@ -289,7 +290,7 @@ const handleFileUpload = async (e) => {
 
   const handlePostAnnouncement = async () => {
     try {
-      await axios.post("http://localhost:5000/api/announcements/create", {
+      await api.post(`/announcements/create`, {
         groupId: group.id,
         userId: currentUser.id,
         title: announceTitle,
@@ -361,11 +362,11 @@ return (
                       >
                         Cancel
                       </button>
-                      <button
+                          <button
                         onClick={async () => {
                           closeToast();
                           try {
-                            await axios.post("http://localhost:5000/api/group/leave", {
+                            await api.post(`/group/leave`, {
                               userId: currentUser.id,
                               groupId: group.id,
                             });
