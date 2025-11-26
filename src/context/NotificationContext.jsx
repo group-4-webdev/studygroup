@@ -1,6 +1,7 @@
 // src/context/NotificationContext.jsx
 import { createContext, useContext, useState, useEffect } from "react";
 import { io } from "socket.io-client";
+import api from "../api";
 
 const NotificationContext = createContext();
 
@@ -12,8 +13,9 @@ export const NotificationProvider = ({ children }) => {
     const user = storedUser ? JSON.parse(storedUser) : null;
     if (!user) return;
 
-    // Connect to Socket.IO (change URL for production)
-    const sock = io("http://localhost:5000", { transports: ["websocket", "polling"] });
+    // Connect to Socket.IO using environment-driven base
+    const SOCKET_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:5000').replace(/\/api\/?$/,'');
+    const sock = io(SOCKET_BASE, { transports: ["websocket", "polling"] });
 
     sock.on("connect", () => {
       sock.emit("join", user.id);
@@ -25,8 +27,8 @@ export const NotificationProvider = ({ children }) => {
     // Fetch initial unread count
     (async () => {
       try {
-        const res = await fetch(`http://localhost:5000/api/notifications/${user.id}`);
-        const data = await res.json();
+        const res = await api.get(`/notifications/${user.id}`);
+        const data = res.data || [];
         const count = data.filter(n => !n.is_read && !n.is_archived && !n.is_deleted).length;
         setUnreadCount(count);
       } catch (err) {

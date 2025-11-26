@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
+import api from "../../api";
 import { io } from "socket.io-client";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -33,7 +33,7 @@ export default function InboxPage() {
     if (!userId) return;
     setLoading(true);
     try {
-      const res = await axios.get(`http://localhost:5000/api/notifs/${userId}`);
+      const res = await api.get(`/notifs/${userId}`);
       const data = res.data || [];
       setMessages(data);
       setUnreadCount(data.filter(n => !n.is_read && !n.is_archived && !n.is_deleted).length);
@@ -48,7 +48,8 @@ export default function InboxPage() {
     fetchNotifications();
 
     if (!userId) return;
-    const socket = io("http://localhost:5000", { transports: ["websocket", "polling"] });
+    const SOCKET_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:5000').replace(/\/api\/?$/,'');
+    const socket = io(SOCKET_BASE, { transports: ["websocket", "polling"] });
 
     socket.on("connect", () => socket.emit("join", userId));
 
@@ -65,7 +66,7 @@ export default function InboxPage() {
   const markRead = async (notif) => {
     if (!notif || notif.is_read) return;
     try {
-      await axios.patch(`http://localhost:5000/api/notifs/${notif.id}/read`);
+      await api.patch(`/notifs/${notif.id}/read`);
       setMessages(prev => prev.map(m => m.id === notif.id ? { ...m, is_read: 1 } : m));
       setUnreadCount(prev => prev - 1);
     } catch (err) { console.error(err); }
@@ -73,14 +74,14 @@ export default function InboxPage() {
 
   const toggleStar = async (id, current) => {
     try {
-      await axios.patch(`http://localhost:5000/api/notifs/${id}/star`);
+      await api.patch(`/notifs/${id}/star`);
       setMessages(prev => prev.map(m => m.id === id ? { ...m, is_starred: !current } : m));
     } catch (err) { toast.error("Failed"); }
   };
 
   const toggleArchive = async (id, current) => {
     try {
-      await axios.patch(`http://localhost:5000/api/notifs/${id}/archive`);
+      await api.patch(`/notifs/${id}/archive`);
       setMessages(prev => prev.map(m => m.id === id ? { ...m, is_archived: !current } : m));
       if (selected?.id === id) setSelected(null);
     } catch (err) { toast.error("Failed"); }
@@ -88,7 +89,7 @@ export default function InboxPage() {
 
   const deleteNotification = async (id) => {
     try {
-      await axios.delete(`http://localhost:5000/api/notifs/${id}`);
+      await api.delete(`/notifs/${id}`);
       setMessages(prev => prev.filter(m => m.id !== id));
       if (selected?.id === id) setSelected(null);
     } catch (err) { toast.error("Failed"); }
@@ -97,7 +98,7 @@ export default function InboxPage() {
   // ✅ Approve join request
   const approveRequest = async (notif) => {
     try {
-      await axios.post("http://localhost:5000/api/group/approve", {
+      await api.post(`/group/approve`, {
         groupId: notif.related_id,
         userId: notif.requester_id
       });
@@ -105,8 +106,8 @@ export default function InboxPage() {
       toast.success("Member approved!");
 
       // Mark creator's notification as read & archived
-      await axios.patch(`http://localhost:5000/api/notifs/${notif.id}/read`);
-      await axios.patch(`http://localhost:5000/api/notifs/${notif.id}/archive`);
+      await api.patch(`/notifs/${notif.id}/read`);
+      await api.patch(`/notifs/${notif.id}/archive`);
       setMessages(prev => prev.map(m => m.id === notif.id ? { ...m, is_read: 1, is_archived: 1 } : m));
 
     } catch (err) {
@@ -118,15 +119,15 @@ export default function InboxPage() {
   // ✅ Decline join request
   const declineRequest = async (notif) => {
     try {
-      await axios.post("http://localhost:5000/api/group/decline", {
+      await api.post(`/group/decline`, {
         groupId: notif.related_id,
         userId: notif.requester_id
       });
 
       toast.success("Request declined!");
 
-      await axios.patch(`http://localhost:5000/api/notifs/${notif.id}/read`);
-      await axios.patch(`http://localhost:5000/api/notifs/${notif.id}/archive`);
+      await api.patch(`/notifs/${notif.id}/read`);
+      await api.patch(`/notifs/${notif.id}/archive`);
       setMessages(prev => prev.map(m => m.id === notif.id ? { ...m, is_read: 1, is_archived: 1 } : m));
     } catch (err) {
       console.error(err);

@@ -49,7 +49,7 @@ export default function CreateGroupPage() {
     console.log("Payload being sent:", payload);
 
     try {
-      const response = await api.post("http://localhost:5000/api/group/create", payload);
+      const response = await api.post(`/group/create`, payload);
       toast.success(response.data.message || "Group created successfully!");
 
       // Reset form

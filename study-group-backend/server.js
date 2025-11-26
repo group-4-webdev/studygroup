@@ -83,8 +83,9 @@ const upload = multer({ storage });
 app.post("/api/upload", upload.single("file"), (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
   
-  // Construct public URL
-  const fileUrl = `http://localhost:5000/uploads/${req.file.filename}`;
+  // Construct public URL using request host or environment override
+  const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+  const fileUrl = `${baseUrl}/uploads/${req.file.filename}`;
   res.json({ fileUrl, filename: req.file.originalname });
 });
 

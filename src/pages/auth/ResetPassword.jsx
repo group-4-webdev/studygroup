@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams, useSearchParams, Link } from "react-router-dom";
 import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/solid";
+import api from "../../api";
 
 export default function ResetPassword() {
   const navigate = useNavigate();
@@ -35,14 +36,9 @@ export default function ResetPassword() {
     setLoading(true);
 
     try {
-      const res = await fetch(`http://localhost:5000/api/password/reset-password/${token}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Reset failed");
+      const res = await api.post(`/password/reset-password/${token}`, { password });
+      const data = res.data;
+      if (res.status >= 400) throw new Error(data.message || "Reset failed");
 
       setSuccess(true);
 

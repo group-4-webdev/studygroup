@@ -1,6 +1,6 @@
 // src/pages/admin/ManageGroups.jsx
 import { useEffect, useState } from "react";
-import axios from "axios";
+import api from "../../api";
 import { io } from "socket.io-client";
 import { CheckCircleIcon, XCircleIcon, UsersIcon, ClockIcon, ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/24/solid";
 import { toast, ToastContainer } from "react-toastify";
@@ -20,7 +20,7 @@ export default function ManageGroups() {
 const fetchGroups = async () => {
   setLoading(true);
   try {
-    const res = await axios.get("http://localhost:5000/api/group/all"); // ← Show ALL
+    const res = await api.get(`/group/all`); // ← Show ALL
     const groupList = Array.isArray(res.data)
       ? res.data
       : res.data?.data || [];
@@ -45,7 +45,8 @@ const fetchGroups = async () => {
 useEffect(() => {
   fetchGroups(); // initial load
 
-  const socket = io("http://localhost:5000");
+  const SOCKET_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:5000').replace(/\/api\/?$/,'');
+  const socket = io(SOCKET_BASE);
 
   // NEW GROUPS APPEAR INSTANTLY IN PENDING
   socket.on("newPendingGroup", (newGroup) => {
@@ -69,7 +70,7 @@ useEffect(() => {
 const handleApprove = async (groupId) => {
   if (!confirm("Approve this group?")) return;
   try {
-    await axios.patch(`http://localhost:5000/api/admin/approve/${groupId}`);
+    await api.patch(`/admin/approve/${groupId}`);
     toast.success("Group approved! Creator will receive an email.");
     fetchGroups();
   } catch (err) {
@@ -82,7 +83,7 @@ const handleDecline = async (groupId) => {
   if (!confirm("Decline this group?")) return;
   const remarks = prompt("Reason for declining this group:") || "No remarks provided";
   try {
-    await axios.patch(`http://localhost:5000/api/admin/decline/${groupId}`, { remarks });
+    await api.patch(`/admin/decline/${groupId}`, { remarks });
     toast.info("Group declined! Creator will receive an email.");
     fetchGroups();
   } catch (err) {

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import axios from "axios";
+import api from "../../api";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -29,7 +29,7 @@ export default function EditGroupPage() {
 
     const fetchGroup = async () => {
       try {
-        const res = await axios.get(`http://localhost:5000/api/group/${groupId}`);
+        const res = await api.get(`/group/${groupId}`);
         const data = res.data.data;
 
         if (!data) {
@@ -83,7 +83,7 @@ const handleSubmit = async (e) => {
     };
 
     // PUT request to update group
-    const res = await axios.put(`http://localhost:5000/api/group/${groupId}`, payload);
+    const res = await api.put(`/group/${groupId}`, payload);
 
     if (res.data.success) {
       toast.success("Group updated! Waiting for admin approval.");

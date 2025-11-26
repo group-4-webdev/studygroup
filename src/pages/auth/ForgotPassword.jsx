@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import api from "../../api";
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
@@ -18,15 +19,10 @@ export default function ForgotPassword() {
     setLoading(true);
 
     try {
-      const res = await fetch("http://localhost:5000/api/password/forgot-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
+      const res = await api.post(`/password/forgot-password`, { email });
+      const data = res.data;
 
-      const data = await res.json();
-
-      if (!res.ok) throw new Error(data.message || "Failed to send reset link");
+      if (res.status >= 400) throw new Error(data.message || "Failed to send reset link");
 
       if (data.type === "google") {
         alert(data.message); 

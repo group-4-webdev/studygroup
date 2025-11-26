@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/solid";
 import { loginUser } from "../../utils/auth";
 import { GoogleLogin } from "@react-oauth/google";
+import api from "../../api";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -19,8 +20,8 @@ export default function LoginPage() {
 
       (async () => {
         try {
-          const res = await fetch(`http://localhost:5000/api/auth/check-google?email=${encodeURIComponent(emailFromURL)}`);
-          const data = await res.json();
+          const res = await api.get(`/auth/check-google?email=${encodeURIComponent(emailFromURL)}`);
+          const data = res.data;
           if (data.isGoogleOnly) {
             alert("This account was created using Google Sign-In. You cannot log in with a password. Please use Google login.");
           }
@@ -41,15 +42,10 @@ const handleLogin = async () => {
   setLoading(true);
 
   try {
-    const res = await fetch("http://localhost:5000/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
+    const res = await api.post(`/auth/login`, { email, password });
+    const data = res.data;
 
-    const data = await res.json();
-
-    if (!res.ok) throw new Error(data.message || "Login failed");
+    if (res.status >= 400) throw new Error(data.message || "Login failed");
 
 const userData = {
   id: data.user.id || data.user._id, // always capture correct id
@@ -74,14 +70,9 @@ localStorage.setItem("user", JSON.stringify(userData));
 
   const handleGoogleLogin = async (credentialResponse) => {
     try {
-      const res = await fetch("http://localhost:5000/api/auth/google", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken: credentialResponse.credential }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Google Login failed");
+      const res = await api.post(`/auth/google`, { idToken: credentialResponse.credential });
+      const data = res.data;
+      if (res.status >= 400) throw new Error(data.message || "Google Login failed");
 
 loginUser(
   {

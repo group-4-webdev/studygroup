@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import api from "../../api";
 
 export default function VerificationPage() {
   const [code, setCode] = useState("");
@@ -23,13 +24,9 @@ export default function VerificationPage() {
     }
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:5000/api/auth/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, code }), 
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Verification failed");
+      const res = await api.post(`/auth/verify`, { email, code });
+      const data = res.data;
+      if (!res || res.status >= 400) throw new Error(data?.message || "Verification failed");
 
       setSuccess(true);
       setTimeout(() => navigate(`/login?email=${encodeURIComponent(email)}`), 3000);

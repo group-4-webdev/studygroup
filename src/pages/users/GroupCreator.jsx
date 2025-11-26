@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import axios from "axios";
+import api from "../../api";
 import { io } from "socket.io-client";
 import { ClockIcon, XCircleIcon, CheckCircleIcon } from "@heroicons/react/24/solid";
 import { toast, ToastContainer } from "react-toastify";
@@ -26,7 +26,7 @@ const fetchGroups = async () => {
 
   try {
     const [allRes] = await Promise.all([
-      axios.get("http://localhost:5000/api/group/all")
+      api.get(`/group/all`)
     ]);
 
     const allGroups = allRes.data.data || [];
@@ -61,7 +61,7 @@ const fetchGroups = async () => {
   const fetchPendingMembers = async () => {
     if (!currentUserId) return;
     try {
-      const res = await axios.get(`http://localhost:5000/api/group/pending-members/${currentUserId}`);
+      const res = await api.get(`/group/pending-members/${currentUserId}`);
       // Expected response: { groupId: [{userId, username}, ...], ... }
       setPendingMembersMap(res.data.data || {});
     } catch (err) {
@@ -75,7 +75,8 @@ useEffect(() => {
   fetchGroups();
   fetchPendingMembers();
 
-  socket = io("http://localhost:5000");
+  const SOCKET_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:5000').replace(/\/api\/?$/,'');
+  socket = io(SOCKET_BASE);
 
   socket.emit("join_creator", currentUserId);
 
@@ -104,7 +105,7 @@ useEffect(() => {
 
 const handleApproveMember = async (groupId, user) => {
   try {
-    await axios.post(`http://localhost:5000/api/group/${groupId}/approve`, { userId: user.userId });
+    await api.post(`/group/${groupId}/approve`, { userId: user.userId });
     toast.success(`${user.username} has been approved!`);
     fetchPendingMembers();
     socket.emit("request_approved", {
@@ -120,7 +121,7 @@ const handleApproveMember = async (groupId, user) => {
 
 const handleDeclineMember = async (groupId, user) => {
   try {
-    await axios.post(`http://localhost:5000/api/group/${groupId}/decline`, { userId: user.userId });
+    await api.post(`/group/${groupId}/decline`, { userId: user.userId });
     toast.info(`${user.username} has been declined.`);
     fetchPendingMembers();
     socket.emit("request_declined", { userId: user.userId, groupId });

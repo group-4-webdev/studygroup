@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/solid";
 import { GoogleLogin } from "@react-oauth/google";
+import api from "../../api";
 
 export default function CreateAccount() {
   const navigate = useNavigate();
@@ -45,22 +46,18 @@ const handleCreate = async (e) => {
   setLoading(true);
 
   try {
-    const res = await fetch("http://localhost:5000/api/auth", {  // Make sure route is correct!
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        first_name,
-        middle_name: middle_name || null,
-        last_name,
-        username,
-        email,
-        password
-      }),
+    const res = await api.post(`/auth`, {
+      first_name,
+      middle_name: middle_name || null,
+      last_name,
+      username,
+      email,
+      password
     });
 
-    const data = await res.json();
+    const data = res.data;
 
-    if (!res.ok) {
+    if (res.status >= 400) {
       throw new Error(data.message || "Failed to create account");
     }
 
@@ -80,14 +77,10 @@ const handleCreate = async (e) => {
   const handleGoogleSignUp = async (credentialResponse) => {
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:5000/api/auth/google", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken: credentialResponse.credential }),
-      });
+      const res = await api.post(`/auth/google`, { idToken: credentialResponse.credential });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Google Sign-Up failed");
+      const data = res.data;
+      if (res.status >= 400) throw new Error(data.message || "Google Sign-Up failed");
 
       alert("✅ Google account created! Check your WMSU email for verification.");
       navigate("/verify?email=" + encodeURIComponent(data.user.email));
